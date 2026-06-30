@@ -344,9 +344,28 @@ function Deploy-CustomDetection {
                 }
             }
             #endregion
-        } catch {
-            Write-Error "Error deploying detection rule from '$InputFile': $($_.Exception.Message)"
-            Write-Verbose "$($_.ErrorDetails.Message)"
+        }
+        catch [Microsoft.Graph.PowerShell.Authentication.Helpers.HttpResponseException] {
+            $exMsg = $_.Exception.Message
+
+            if ($_.ErrorDetails.Message -and $_.ErrorDetails.Message -match '(\{.+\})\s*$') {
+                try {
+                    $errorBody = $Matches[1] | ConvertFrom-Json
+                    if ($errorBody.error.message) {
+                        $exMsg = $exMsg -replace '\(([^)]+)\)\.?\s*$', "($($errorBody.error.message))"
+                    }
+                }
+                catch {
+                    # JSON parsing failed; keep original message
+                }
+            }
+
+            Write-Error "Error deploying detection rule from '$InputFile': $exMsg"
+            Write-Debug "$(($jsonObj | ConvertTo-Json -Depth 10))"
+            throw
+        }
+        catch {
+            Write-Error "Unexpected error deploying detection rule from '$InputFile': $_"
             Write-Debug "$(($jsonObj | ConvertTo-Json -Depth 10))"
             throw
         }
