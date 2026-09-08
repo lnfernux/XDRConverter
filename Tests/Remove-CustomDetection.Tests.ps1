@@ -129,6 +129,22 @@ Describe 'Remove-CustomDetection' {
             $result.RuleId | Should -Be 'rule-123'
         }
 
+        It 'Should clear the id cache after a delete' {
+            Mock Get-CustomDetection {
+                return @{ id = 'rule-789'; displayName = 'Cached Rule' }
+            } -ModuleName XDRConverter
+            Mock Invoke-MgGraphRequest {} -ModuleName XDRConverter
+            InModuleScope XDRConverter {
+                $script:DetectionIdsCache = @{ Data = @(@{ Id = 'rule-789' }); ExpiresAt = [datetime]::UtcNow.AddHours(1) }
+            }
+
+            Remove-CustomDetection -Id 'rule-789' -Confirm:$false | Out-Null
+
+            InModuleScope XDRConverter {
+                $script:DetectionIdsCache.Data | Should -BeNullOrEmpty
+            }
+        }
+
         It 'Should call DELETE on the correct URI' {
             Mock Get-CustomDetection {
                 return @{ id = 'rule-456'; displayName = 'My Rule' }

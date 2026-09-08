@@ -196,6 +196,39 @@ Describe 'Get-CustomDetectionIds' {
         }
     }
 
+    Context 'Without detectorId' {
+        BeforeEach {
+            Mock Assert-MgGraphConnection {} -ModuleName XDRConverter
+            Mock Invoke-MgGraphRequestWithRetry {
+                $script:CapturedUri = $Uri
+                return @{
+                    value = @(
+                        @{
+                            id              = 'rule-new'
+                            detectionAction = @{ alertTemplate = @{ description = 'Alert [12345678-1234-1234-1234-123456789abc]' } }
+                        }
+                    )
+                    '@odata.nextLink' = $null
+                }
+            } -ModuleName XDRConverter
+            InModuleScope XDRConverter {
+                $script:DetectionIdsCache = @{ Data = $null; ExpiresAt = [datetime]::MinValue }
+            }
+        }
+
+        It 'Should not select detectorId from the API' {
+            Get-CustomDetectionIds | Out-Null
+            $script:CapturedUri | Should -Not -Match 'detectorId'
+            $script:CapturedUri | Should -Match '\$select=id,detectionAction'
+        }
+
+        It 'Should fall back to the rule id for DetectorId' {
+            $result = Get-CustomDetectionIds
+            $result[0].DetectorId | Should -Be 'rule-new'
+            $result[0].DescriptionTag | Should -Be '12345678-1234-1234-1234-123456789abc'
+        }
+    }
+
     Context 'Parameter Validation' {
         It 'Should have CacheTtlMinutes parameter' {
             $cmd = Get-Command Get-CustomDetectionIds

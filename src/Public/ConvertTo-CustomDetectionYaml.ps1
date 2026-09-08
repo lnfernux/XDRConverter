@@ -35,6 +35,10 @@ function ConvertTo-CustomDetectionYaml {
     .PARAMETER Enabled
         Optional. Set the isEnabled property to this value (true or false).
 
+    .PARAMETER LegacyKeys
+        Emit the legacy YAML keys instead of the current ones. Values the legacy keys cannot
+        express are kept in their current form or dropped, each with a warning.
+
     .PARAMETER Severity
         Optional. Override the alert severity. Valid values: Informational, Low, Medium, High.
 
@@ -92,7 +96,10 @@ function ConvertTo-CustomDetectionYaml {
 
         [Parameter(HelpMessage = 'Set the severity level (Informational, Low, Medium, High)')]
         [ValidateSet('Informational', 'Low', 'Medium', 'High')]
-        [string]$Severity
+        [string]$Severity,
+
+        [Parameter(HelpMessage = 'Emit the legacy YAML keys (alertCategory, mitreTechniques, impactedEntities, period-style frequency)')]
+        [switch]$LegacyKeys
     )
 
     process {
@@ -117,7 +124,7 @@ function ConvertTo-CustomDetectionYaml {
                     $safeName = ($safeName -split '\s+' | ForEach-Object { $_.Substring(0, 1).ToUpper() + $_.Substring(1) }) -join ''
                     $OutputFile = Join-Path $folder "$safeName.yaml"
                 } else {
-                    $OutputFile = Join-Path $folder "$($jsonObj.detectorId).yaml"
+                    $OutputFile = Join-Path $folder "$(Get-CustomDetectionIdentity -Rule $jsonObj).yaml"
                 }
             }
 
@@ -136,6 +143,10 @@ function ConvertTo-CustomDetectionYaml {
 
             # Convert to YAML object
             $yamlObj = ConvertFrom-CustomDetectionJsonToYaml @convertParams
+
+            if ($LegacyKeys) {
+                $yamlObj = ConvertTo-CustomDetectionLegacyYaml -YamlObject $yamlObj
+            }
 
             # Convert to YAML string (inline: single line operation)
             $yamlString = $yamlObj | ConvertTo-Yaml -OutFile $null

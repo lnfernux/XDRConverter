@@ -4,37 +4,85 @@
     "type": "object",
     "description": "Schema for Microsoft XDR Custom Detection YAML templates used for automated deployment",
     "additionalProperties": false,
-    "properties": {
-        "id": {
+    "definitions": {
+        "uuid": {
             "type": "string",
             "format": "uuid",
-            "description": "A unique UUID used to globally identify the custom detection rule",
             "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "columnName": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Name of the query result column"
+        },
+        "mappingItems": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "type": "object",
+                "minProperties": 1
+            }
+        }
+    },
+    "properties": {
+        "guid": {
+            "$ref": "#/definitions/uuid",
+            "description": "A unique UUID used to globally identify the custom detection rule. Becomes the rule id on creation"
+        },
+        "id": {
+            "$ref": "#/definitions/uuid",
+            "description": "Alias of guid. When both are present they must be equal"
         },
         "ruleName": {
             "type": "string",
-            "description": "Name of the custom detection rule",
-            "pattern": ""
+            "description": "Name of the custom detection rule"
+        },
+        "description": {
+            "type": "string",
+            "description": "Optional description of the rule itself, shown in the portal rule list"
         },
         "isEnabled": {
             "type": "boolean",
-            "description": "Set to true. Legacy field as the global metadata will decide if the rule is enabled or not",
+            "description": "Legacy switch. true maps to status enabled, false to status disabled. Ignored when status is present",
             "default": true
+        },
+        "status": {
+            "type": "string",
+            "description": "Rule status. Wins over isEnabled when both are present",
+            "enum": [
+                "enabled",
+                "disabled",
+                "autoDisabled"
+            ]
         },
         "alertTitle": {
             "type": "string",
-            "description": "Title of the alert that will be generated",
-            "pattern": ""
+            "description": "Title of the alert that will be generated"
         },
         "frequency": {
-            "type": "string",
-            "description": "Frequency of rule execution. 0 = NRT (Near Real Time), other values in hours",
-            "enum": [
-                "0",
-                "1H",
-                "3H",
-                "12H",
-                "24H"
+            "description": "Run frequency. Legacy tokens 0, 1H, 3H, 12H and 24H are accepted and translated to ISO 8601 durations",
+            "oneOf": [
+                {
+                    "type": "string",
+                    "enum": [
+                        "0",
+                        "1H",
+                        "3H",
+                        "12H",
+                        "24H"
+                    ]
+                },
+                {
+                    "type": "integer",
+                    "enum": [
+                        0
+                    ]
+                },
+                {
+                    "type": "string",
+                    "pattern": "^P(?=\\d|T\\d)(?:\\d+D)?(?:T(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+                    "description": "ISO 8601 duration such as PT0S, PT1H, PT3H, PT12H or P1D"
+                }
             ]
         },
         "alertSeverity": {
@@ -57,7 +105,7 @@
         },
         "alertCategory": {
             "type": "string",
-            "description": "Category of the alert, same options as the dropdown in the UI. Use camel case, no spaces",
+            "description": "Legacy alert category. Becomes the single tactic. Ignored when tactics is present",
             "enum": [
                 "CredentialAccess",
                 "DefenseEvasion",
@@ -71,12 +119,13 @@
                 "PrivilegeEscalation",
                 "Collection",
                 "CommandAndControl",
-                "SuspiciousActivity"
+                "SuspiciousActivity",
+                "Malware"
             ]
         },
         "mitreTechniques": {
             "type": "array",
-            "description": "Array of MITRE ATT&CK technique IDs",
+            "description": "Legacy flat list of MITRE ATT&CK technique IDs. Grouped under the alertCategory tactic. Ignored when tactics is present",
             "items": {
                 "type": "string",
                 "pattern": "^T\\d{4}(\\.\\d{3})?$",
@@ -84,18 +133,69 @@
             },
             "uniqueItems": true
         },
+        "tactics": {
+            "type": "array",
+            "description": "The tactic with its techniques. Wins over alertCategory and mitreTechniques. The API accepts one tactic per rule",
+            "minItems": 1,
+            "maxItems": 1,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "tactic": {
+                        "type": "string",
+                        "description": "Tactic name, for example Execution"
+                    },
+                    "techniques": {
+                        "type": "array",
+                        "items": {
+                            "oneOf": [
+                                {
+                                    "type": "string",
+                                    "pattern": "^T\\d{4}(\\.\\d{3})?$"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "technique": {
+                                            "type": "string",
+                                            "pattern": "^T\\d{4}$"
+                                        },
+                                        "subTechniques": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string",
+                                                "pattern": "^T\\d{4}\\.\\d{3}$"
+                                            },
+                                            "uniqueItems": true
+                                        }
+                                    },
+                                    "required": [
+                                        "technique"
+                                    ],
+                                    "additionalProperties": false
+                                }
+                            ]
+                        }
+                    }
+                },
+                "required": [
+                    "tactic"
+                ],
+                "additionalProperties": false
+            }
+        },
         "organizationalScope": {
             "type": "array",
-            "description": "Array of RBAC group names that define the organizational scope",
+            "description": "Device group names the rule applies to. An empty list means all devices",
             "items": {
                 "type": "string",
-                "description": "RBAC group name"
+                "description": "Device group name"
             },
             "uniqueItems": true
         },
         "impactedEntities": {
             "type": "array",
-            "description": "Array of entities that are impacted by this detection",
+            "description": "Legacy entity list. Translated to entityMappings. Ignored when entityMappings is present",
             "items": {
                 "type": "object",
                 "properties": {
@@ -104,15 +204,10 @@
                         "description": "Type of the impacted entity",
                         "enum": [
                             "Machine",
+                            "Device",
                             "User",
-                            "Mailbox",
                             "Account",
-                            "IP",
-                            "URL",
-                            "FileHash",
-                            "Process",
-                            "RegistryKey",
-                            "RegistryValue"
+                            "Mailbox"
                         ]
                     },
                     "entityIdentifier": {
@@ -127,9 +222,93 @@
                 "additionalProperties": false
             }
         },
+        "entityMappings": {
+            "type": "object",
+            "description": "Query columns that identify the alert entities, keyed by entity collection",
+            "additionalProperties": false,
+            "properties": {
+                "accounts": {
+                    "$ref": "#/definitions/mappingItems",
+                    "description": "Columns: aadUserIdColumn, dnsDomainColumn, nameColumn, ntDomainColumn, sidColumn, upnColumn, upnSuffixColumn"
+                },
+                "amazonResources": {
+                    "$ref": "#/definitions/mappingItems",
+                    "description": "Columns: amazonResourceIdColumn"
+                },
+                "azureResources": {
+                    "$ref": "#/definitions/mappingItems",
+                    "description": "Columns: resourceIdColumn"
+                },
+                "cloudApplications": {
+                    "$ref": "#/definitions/mappingItems",
+                    "description": "Columns: appIdColumn, nameColumn"
+                },
+                "dns": {
+                    "$ref": "#/definitions/mappingItems",
+                    "description": "Columns: domainNameColumn, hostIpAddressColumn, serverIpColumn"
+                },
+                "files": {
+                    "$ref": "#/definitions/mappingItems",
+                    "description": "Columns: nameColumn, sha1Column, sha256Column"
+                },
+                "googleCloudResources": {
+                    "$ref": "#/definitions/mappingItems",
+                    "description": "Columns: fullResourceNameColumn"
+                },
+                "hosts": {
+                    "$ref": "#/definitions/mappingItems",
+                    "description": "Columns: deviceIdColumn, dnsDomainColumn, nameColumn, netBiosNameColumn, ntDomainColumn"
+                },
+                "ips": {
+                    "$ref": "#/definitions/mappingItems",
+                    "description": "Columns: addressColumn, scopeColumn"
+                },
+                "mailboxes": {
+                    "$ref": "#/definitions/mappingItems",
+                    "description": "Columns: primaryAddressColumn"
+                },
+                "mailClusters": {
+                    "$ref": "#/definitions/mappingItems",
+                    "description": "Columns: queryColumn, sourceColumn"
+                },
+                "mailMessages": {
+                    "$ref": "#/definitions/mappingItems",
+                    "description": "Columns: networkMessageIdColumn, recipientColumn, senderColumn, subjectColumn"
+                },
+                "oAuthApplications": {
+                    "$ref": "#/definitions/mappingItems",
+                    "description": "Columns: oAuthAppIdColumn"
+                },
+                "processes": {
+                    "$ref": "#/definitions/mappingItems",
+                    "description": "Columns: sha1Column, sha256Column"
+                },
+                "registryValues": {
+                    "$ref": "#/definitions/mappingItems",
+                    "description": "Columns: keyColumn, valueNameColumn"
+                },
+                "securityGroups": {
+                    "$ref": "#/definitions/mappingItems",
+                    "description": "Columns: distinguishedNameColumn, objectIdColumn, sidColumn"
+                },
+                "urls": {
+                    "$ref": "#/definitions/mappingItems",
+                    "description": "Columns: addressColumn"
+                }
+            }
+        },
+        "customDetails": {
+            "type": "object",
+            "description": "Custom details attached to the alert, mapping a detail name to a query column",
+            "minProperties": 1,
+            "maxProperties": 20,
+            "additionalProperties": {
+                "$ref": "#/definitions/columnName"
+            }
+        },
         "actions": {
             "type": "array",
-            "description": "Array of automated response actions to take when the detection triggers",
+            "description": "Automated response actions to take when the detection triggers",
             "items": {
                 "type": "object",
                 "properties": {
@@ -141,12 +320,23 @@
                             "CollectInvestigationPackage",
                             "RunAntivirusScan",
                             "InitiateInvestigation",
-                            "RestrictAppExecution"
+                            "RestrictAppExecution",
+                            "StopAndQuarantineFile",
+                            "AllowFile",
+                            "BlockFile",
+                            "DisableUser",
+                            "ForceUserPasswordReset",
+                            "MarkUserAsCompromised",
+                            "HardDeleteEmail",
+                            "SoftDeleteEmail",
+                            "MoveEmailToInbox",
+                            "MoveEmailToJunk",
+                            "MoveEmailToDeletedItems"
                         ]
                     },
                     "additionalFields": {
                         "type": "object",
-                        "description": "Additional configuration fields specific to the action type",
+                        "description": "Column mapping and options for the action. Defaults apply when omitted",
                         "properties": {
                             "isolationType": {
                                 "type": "string",
@@ -156,9 +346,36 @@
                                     "Selective"
                                 ],
                                 "default": "Full"
+                            },
+                            "deviceIdColumn": {
+                                "$ref": "#/definitions/columnName"
+                            },
+                            "sha1Column": {
+                                "$ref": "#/definitions/columnName"
+                            },
+                            "sha256Column": {
+                                "$ref": "#/definitions/columnName"
+                            },
+                            "deviceGroupNames": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            },
+                            "accountSidColumn": {
+                                "$ref": "#/definitions/columnName"
+                            },
+                            "accountObjectIdColumn": {
+                                "$ref": "#/definitions/columnName"
+                            },
+                            "networkMessageIdColumn": {
+                                "$ref": "#/definitions/columnName"
+                            },
+                            "recipientColumn": {
+                                "$ref": "#/definitions/columnName"
                             }
                         },
-                        "additionalProperties": true
+                        "additionalProperties": false
                     }
                 },
                 "required": [
@@ -173,13 +390,41 @@
         }
     },
     "required": [
-        "guid",
         "ruleName",
         "alertTitle",
         "frequency",
         "alertSeverity",
         "alertDescription",
-        "alertCategory",
         "queryText"
+    ],
+    "allOf": [
+        {
+            "anyOf": [
+                {
+                    "required": [
+                        "guid"
+                    ]
+                },
+                {
+                    "required": [
+                        "id"
+                    ]
+                }
+            ]
+        },
+        {
+            "anyOf": [
+                {
+                    "required": [
+                        "alertCategory"
+                    ]
+                },
+                {
+                    "required": [
+                        "tactics"
+                    ]
+                }
+            ]
+        }
     ]
 }

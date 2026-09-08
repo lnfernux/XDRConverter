@@ -1,13 +1,14 @@
 function Get-CustomDetectionIds {
     <#
     .SYNOPSIS
-        Lists detection rule IDs with their detector IDs and description tags.
+        Lists detection rule IDs with their description tags.
 
     .DESCRIPTION
         Queries Microsoft Graph API to retrieve all detection rules and returns
-        their detection rule ID, detector ID, the UUID from the description
-        tag (if present), and the tag prefix (if present). Results are cached 
-        for the duration specified by CacheTtlMinutes (default: 60 minutes).
+        their detection rule ID, the UUID from the description tag (if present),
+        and the tag prefix (if present). The DetectorId property is kept for
+        compatibility and carries the rule ID. Results are cached for the
+        duration specified by CacheTtlMinutes (default: 60 minutes).
 
     .PARAMETER CacheTtlMinutes
         How long (in minutes) to keep the cached result before re-querying the API.
@@ -63,7 +64,7 @@ function Get-CustomDetectionIds {
 
         try {
             # Query the Microsoft Graph API with pagination support
-            $uri = "https://graph.microsoft.com/beta/security/rules/detectionRules?`$select=id,detectorId,detectionAction"
+            $uri = "https://graph.microsoft.com/beta/security/rules/detectionRules?`$select=id,detectionAction"
             $allValues = [System.Collections.Generic.List[object]]::new()
 
             do {
@@ -95,7 +96,7 @@ function Get-CustomDetectionIds {
 
                     [PSCustomObject]@{
                         Id             = $_.id
-                        DetectorId     = $_.detectorId
+                        DetectorId     = if ($_.detectorId) { $_.detectorId } else { $_.id }
                         DescriptionTag = $descriptionTag
                         TagPrefix      = $tagPrefix
                     }

@@ -1,11 +1,14 @@
 function ConvertFrom-CustomDetectionYamlToJson {
     <#
     .SYNOPSIS
-        Converts YAML content to JSON following the Defender XDR schema.
+        Converts a YAML detection rule into the Graph API request body.
 
     .DESCRIPTION
-        Performs the mapping from YAML properties to JSON properties according to
-        the Microsoft Defender XDR custom detection JSON schema.
+        Accepts both the legacy YAML keys (isEnabled, alertCategory,
+        mitreTechniques, impactedEntities, period-style frequency) and the
+        current keys (status, tactics, entityMappings, customDetails,
+        description, ISO 8601 frequency). Legacy values are translated to the
+        current Graph properties. When both forms are present the current key wins.
     #>
     [CmdletBinding()]
     param(
@@ -23,140 +26,156 @@ function ConvertFrom-CustomDetectionYamlToJson {
         [switch]$SkipIdentifierValidation
     )
 
-    # Start building the JSON object
-    $jsonObj = @{
-        detectionAction = @{
-            alertTemplate       = @{}
-            organizationalScope = $null
-            responseActions     = @()
-        }
-        detectorId      = $YamlObject.guid
-        displayName     = $YamlObject.ruleName
-        isEnabled       = if ($PSBoundParameters.ContainsKey('SetEnabled')) { $SetEnabled } else { $YamlObject.isEnabled }
-        queryCondition  = @{
-            queryText = $YamlObject.queryText
-        }
-        schedule        = @{
-            period = [string]$YamlObject.frequency
+    $knownKeys = @(
+        'guid', 'id', 'ruleName', 'description', 'isEnabled', 'status', 'frequency', 'alertTitle',
+        'alertSeverity', 'alertDescription', 'alertRecommendedAction', 'alertCategory', 'mitreTechniques',
+        'tactics', 'impactedEntities', 'entityMappings', 'customDetails', 'organizationalScope', 'actions', 'queryText'
+    )
+
+    $yaml = ConvertTo-CustomDetectionHashtable -InputObject $YamlObject
+    if ($null -eq $yaml) {
+        throw 'The YAML input is not a detection rule object.'
+    }
+
+    foreach ($key in $yaml.Keys) {
+        if ($key -notin $knownKeys) {
+            Write-Warning "Unknown key '$key' is ignored."
         }
     }
 
-    # Map alertTemplate properties
-    $jsonObj.detectionAction.alertTemplate.title = $YamlObject.alertTitle
-    $jsonObj.detectionAction.alertTemplate.description = $YamlObject.alertDescription
-    $jsonObj.detectionAction.alertTemplate.category = $YamlObject.alertCategory
-    $jsonObj.detectionAction.alertTemplate.severity = if ($SetSeverity) { $SetSeverity.ToLower() } else { $YamlObject.alertSeverity.ToLower() }
-    $jsonObj.detectionAction.alertTemplate.recommendedActions = $YamlObject.alertRecommendedAction
+    function Get-YamlValue {
+        param([string]$Key)
+        if ($yaml.Contains($Key)) { return $yaml[$Key] }
+        return $null
+    }
 
-    # Map MITRE techniques
-    if ($YamlObject.mitreTechniques) {
-        $jsonObj.detectionAction.alertTemplate.mitreTechniques = $YamlObject.mitreTechniques
+    function Test-HasValue {
+        param([object]$Value)
+        if ($null -eq $Value) { return $false }
+        if ($Value -is [string]) { return -not [string]::IsNullOrWhiteSpace($Value) }
+        if ($Value -is [System.Collections.IDictionary]) { return $Value.Count -gt 0 }
+        if ($Value -is [System.Collections.IEnumerable]) { return @($Value).Count -gt 0 }
+        return $true
+    }
+
+    $guid = Get-YamlValue -Key 'guid'
+    $idAlias = Get-YamlValue -Key 'id'
+    if ((Test-HasValue $guid) -and (Test-HasValue $idAlias) -and ("$guid" -ne "$idAlias")) {
+        throw "The guid '$guid' and id '$idAlias' differ. Use one of them."
+    }
+    $ruleId = if (Test-HasValue $guid) { "$guid" } elseif (Test-HasValue $idAlias) { "$idAlias" } else { $null }
+
+    $status = if ($PSBoundParameters.ContainsKey('SetEnabled')) {
+        ConvertTo-CustomDetectionStatus -IsEnabled $SetEnabled
     } else {
-        $jsonObj.detectionAction.alertTemplate.mitreTechniques = @()
+        ConvertTo-CustomDetectionStatus -IsEnabled (Get-YamlValue -Key 'isEnabled') -Status (Get-YamlValue -Key 'status')
     }
 
-    # Map impacted entities to impactedAssets
-    if ($YamlObject.impactedEntities) {
-        # Define valid identifiers for each asset type
-        # https://learn.microsoft.com/en-us/graph/api/resources/security-impactedasset?view=graph-rest-beta
-        $validIdentifiers = @{
-            'Device'  = @(
-                'deviceId', 'deviceName', 'remoteDeviceName', 'targetDeviceName', 'destinationDeviceName'
-            )
-            'User'    = @(
-                'accountObjectId', 'accountSid', 'accountUpn', 'accountName', 'accountDomain',
-                'accountId', 'requestAccountSid', 'requestAccountName', 'requestAccountDomain',
-                'recipientObjectId', 'processAccountObjectId', 'initiatingAccountSid',
-                'initiatingProcessAccountUpn', 'initiatingAccountName', 'initiatingAccountDomain',
-                'servicePrincipalId', 'servicePrincipalName', 'targetAccountUpn',
-                'initiatingProcessAccountObjectId', 'initiatingProcessAccountSid'
-            )
-            'Mailbox' = @(
-                'accountUpn', 'fileOwnerUpn', 'initiatingProcessAccountUpn', 'lastModifyingAccountUpn',
-                'targetAccountUpn', 'senderFromAddress', 'senderDisplayName', 'recipientEmailAddress',
-                'senderMailFromAddress'
-            )
-        }
-
-        $impactedAssets = [System.Collections.Generic.List[hashtable]]::new()
-        foreach ($entity in $YamlObject.impactedEntities) {
-            # Map Machine to Device for Microsoft Graph API compliance
-            $odataEntityType = if ($entity.entityType -eq 'Machine') { 'Device' } else { $entity.entityType }
-
-            # Convert first letter to lowercase for Graph API compliance
-            $identifier = if ($entity.entityIdentifier.Length -gt 0) {
-                $entity.entityIdentifier.Substring(0, 1).ToLower() + $entity.entityIdentifier.Substring(1)
-            } else {
-                $entity.entityIdentifier
-            }
-
-            # Validate identifier for the entity type
-            if ($validIdentifiers.ContainsKey($odataEntityType)) {
-                if ($identifier -notin $validIdentifiers[$odataEntityType]) {
-                    $validList = $validIdentifiers[$odataEntityType] -join ', '
-                    if ($SkipIdentifierValidation) {
-                        Write-Warning "Identifier '$identifier' for entity type '$odataEntityType' is not in the official documentation. Valid identifiers are: $validList"
-                    } else {
-                        throw "Invalid identifier '$identifier' for entity type '$odataEntityType'. Valid identifiers are: $validList"
-                    }
-                }
-            }
-
-            $impactedAssets.Add(@{
-                    '@odata.type' = "#microsoft.graph.security.impacted$($odataEntityType)Asset"
-                    identifier    = $identifier
-                })
-        }
-        $jsonObj.detectionAction.alertTemplate.impactedAssets = $impactedAssets
+    $severity = if ($SetSeverity) {
+        $SetSeverity
+    } else {
+        Get-YamlValue -Key 'alertSeverity'
+    }
+    if (-not (Test-HasValue $severity)) {
+        throw 'The alertSeverity value is required. Use Informational, Low, Medium or High.'
     }
 
-    # Map organizational scope
-    if ($YamlObject.organizationalScope) {
-        $jsonObj.detectionAction.organizationalScope = $YamlObject.organizationalScope
+    $alertTemplate = [ordered]@{
+        title       = Get-YamlValue -Key 'alertTitle'
+        description = Get-YamlValue -Key 'alertDescription'
+        severity    = "$severity".ToLowerInvariant()
     }
 
-    # Map response actions
-    # https://learn.microsoft.com/en-us/graph/api/resources/security-responseaction?view=graph-rest-beta
-    if ($YamlObject.actions) {
-        $actionTypeMap = @{
-            'InitiateInvestigation'      = 'initiateInvestigationResponseAction'
-            'IsolateMachine'             = 'isolateDeviceResponseAction'
-            'CollectInvestigationPackage' = 'collectInvestigationPackageResponseAction'
-            'RunAntivirusScan'           = 'runAntivirusScanResponseAction'
-            'RestrictAppExecution'       = 'restrictAppExecutionResponseAction'
-        }
-
-        $responseActions = [System.Collections.Generic.List[hashtable]]::new()
-        foreach ($action in $YamlObject.actions) {
-            if (-not $actionTypeMap.ContainsKey($action.actionType)) {
-                throw "Unsupported response action type '$($action.actionType)'. Supported types are: $($actionTypeMap.Keys -join ', ')"
-            }
-
-            $odataType = "#microsoft.graph.security.$($actionTypeMap[$action.actionType])"
-            $responseAction = @{
-                '@odata.type' = $odataType
-                identifier    = 'deviceId'
-            }
-
-            # Handle IsolateMachine-specific isolationType field
-            if ($action.actionType -eq 'IsolateMachine') {
-                $isolationType = if ($action.additionalFields -and $action.additionalFields.isolationType) {
-                    $action.additionalFields.isolationType
-                } else {
-                    'Full'
-                }
-                if ($isolationType -notin @('Full', 'Selective')) {
-                    Write-Warning "Isolation type '$isolationType' is not supported. Defaulting to 'Full'."
-                    $isolationType = 'Full'
-                }
-                $responseAction.isolationType = $isolationType.ToLower()
-            }
-
-            $responseActions.Add($responseAction)
-        }
-        $jsonObj.detectionAction.responseActions = $responseActions
+    $recommendedActions = Get-YamlValue -Key 'alertRecommendedAction'
+    if (Test-HasValue $recommendedActions) {
+        $alertTemplate.recommendedActions = $recommendedActions
     }
+
+    $tacticsInput = Get-YamlValue -Key 'tactics'
+    $category = Get-YamlValue -Key 'alertCategory'
+    $techniques = Get-YamlValue -Key 'mitreTechniques'
+    if ((Test-HasValue $tacticsInput) -and ((Test-HasValue $category) -or (Test-HasValue $techniques))) {
+        Write-Verbose 'Both tactics and alertCategory/mitreTechniques are present. Using tactics.'
+    }
+    $tactics = @()
+    if (Test-HasValue $tacticsInput) {
+        $tactics = @(ConvertTo-CustomDetectionTactics -Tactics $tacticsInput)
+    } elseif (Test-HasValue $category) {
+        $tactics = @(ConvertTo-CustomDetectionTactics -Category "$category" -Techniques @($techniques))
+    }
+    if ($tactics.Count -eq 0) {
+        throw 'The rule needs an alertCategory or a tactics list.'
+    }
+    if ($tactics.Count -gt 1) {
+        throw "The rule lists $($tactics.Count) tactics. The API accepts a single tactic per rule."
+    }
+    $alertTemplate['tactics'] = [object[]]$tactics
+
+    $entityMappingsInput = Get-YamlValue -Key 'entityMappings'
+    $impactedEntities = Get-YamlValue -Key 'impactedEntities'
+    $entityMappings = $null
+    if (Test-HasValue $entityMappingsInput) {
+        if (Test-HasValue $impactedEntities) {
+            Write-Verbose 'Both entityMappings and impactedEntities are present. Using entityMappings.'
+        }
+        $entityMappings = ConvertTo-CustomDetectionEntityMappings -EntityMappings $entityMappingsInput -SkipIdentifierValidation:$SkipIdentifierValidation
+    } elseif (Test-HasValue $impactedEntities) {
+        $entityMappings = ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @($impactedEntities) -SkipIdentifierValidation:$SkipIdentifierValidation
+    }
+    if ($entityMappings) {
+        $alertTemplate.entityMappings = $entityMappings
+    }
+
+    $customDetailsInput = ConvertTo-CustomDetectionHashtable -InputObject (Get-YamlValue -Key 'customDetails')
+    if ($customDetailsInput -and $customDetailsInput.Count -gt 0) {
+        if ($customDetailsInput.Count -gt 20) {
+            throw "customDetails holds $($customDetailsInput.Count) entries. The limit is 20."
+        }
+        $customDetails = [ordered]@{}
+        foreach ($key in $customDetailsInput.Keys) {
+            $customDetails[[string]$key] = "$($customDetailsInput[$key])"
+        }
+        $alertTemplate.customDetails = $customDetails
+    }
+
+    $detectionAction = [ordered]@{
+        alertTemplate = $alertTemplate
+    }
+
+    $scope = Get-YamlValue -Key 'organizationalScope'
+    if (Test-HasValue $scope) {
+        $detectionAction['organizationalScope'] = [ordered]@{
+            deviceGroups = [object[]]@($scope | ForEach-Object { "$_" })
+        }
+    }
+
+    $actions = Get-YamlValue -Key 'actions'
+    if (Test-HasValue $actions) {
+        $automatedActions = ConvertTo-CustomDetectionAutomatedActions -Actions @($actions)
+        if ($automatedActions) {
+            $detectionAction.automatedActions = $automatedActions
+        }
+    }
+
+    $jsonObj = [ordered]@{}
+    if ($ruleId) {
+        $jsonObj.id = $ruleId
+    }
+    $jsonObj.displayName = Get-YamlValue -Key 'ruleName'
+    $jsonObj.status = $status
+
+    $description = Get-YamlValue -Key 'description'
+    if (Test-HasValue $description) {
+        $jsonObj.description = $description
+    }
+
+    $jsonObj.queryCondition = [ordered]@{
+        queryText = Get-YamlValue -Key 'queryText'
+    }
+    $jsonObj.schedule = [ordered]@{
+        frequency = ConvertTo-CustomDetectionFrequency -Value (Get-YamlValue -Key 'frequency')
+    }
+    $jsonObj.detectionAction = $detectionAction
 
     return $jsonObj
 }
-

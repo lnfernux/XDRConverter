@@ -328,7 +328,287 @@ queryText: DeviceEvents
             $testYaml | Out-File -FilePath $tempFile -Encoding UTF8
 
             Deploy-CustomDetection -InputFile $tempFile -Disabled -Confirm:$false
-            $script:CapturedBody.isEnabled | Should -Be $false
+            $script:CapturedBody.status | Should -Be 'disabled'
+            $script:CapturedBody.Keys | Should -Not -Contain 'isEnabled'
+        }
+    }
+
+    Context 'Request body shape' {
+
+        BeforeEach {
+            Mock Invoke-MgGraphRequest {
+                $script:CapturedBody = $Body
+                $script:CapturedMethod = $Method
+                return @{ id = 'new-rule-id' }
+            } -ModuleName XDRConverter
+            InModuleScope XDRConverter {
+                $script:DetectionIdsCache = @{ Data = @([PSCustomObject]@{ Id = 'stale' }); ExpiresAt = [datetime]::UtcNow.AddHours(1) }
+            }
+        }
+
+        It 'Should POST the guid as id with the current property names' {
+            $testYaml = @"
+guid: 81fb771a-c57e-41b8-9905-63dbf267c13f
+ruleName: BODY-Create
+isEnabled: true
+alertTitle: Test
+frequency: 1H
+alertSeverity: Medium
+alertDescription: Test
+alertCategory: DefenseEvasion
+mitreTechniques:
+  - T1562.001
+impactedEntities:
+  - entityType: Machine
+    entityIdentifier: DeviceId
+actions:
+  - actionType: IsolateMachine
+queryText: DeviceEvents
+"@
+            $tempFile = Join-Path TestDrive: 'body-create.yaml'
+            $testYaml | Out-File -FilePath $tempFile -Encoding UTF8
+
+            $result = Deploy-CustomDetection -InputFile $tempFile -Confirm:$false
+            $result.Action | Should -Be 'Created'
+            $result.DetectorId | Should -Be '81fb771a-c57e-41b8-9905-63dbf267c13f'
+            $script:CapturedMethod | Should -Be 'POST'
+
+            $body = $script:CapturedBody
+            $body.id | Should -Be '81fb771a-c57e-41b8-9905-63dbf267c13f'
+            $body.status | Should -Be 'enabled'
+            $body.schedule.frequency | Should -Be 'PT1H'
+            $body.detectionAction.alertTemplate.tactics[0].tactic | Should -Be 'DefenseEvasion'
+            $body.detectionAction.alertTemplate.entityMappings.hosts[0].deviceIdColumn | Should -Be 'DeviceId'
+            $body.detectionAction.automatedActions.isolateDevices[0].isolationType | Should -Be 'full'
+            $body.Keys | Should -Not -Contain 'detectorId'
+            $body.Keys | Should -Not -Contain 'isEnabled'
+            $body.schedule.Keys | Should -Not -Contain 'period'
+            $body.detectionAction.Keys | Should -Not -Contain 'responseActions'
+        }
+
+        It 'Should hand the Graph client a body without PSObject-wrapped values' {
+            $testYaml = @"
+guid: 81fb771a-c57e-41b8-9905-63dbf267c13f
+ruleName: BODY-Plain
+alertTitle: Test
+frequency: 1H
+alertSeverity: Medium
+alertDescription: Test
+alertCategory: DefenseEvasion
+mitreTechniques:
+  - T1562.001
+impactedEntities:
+  - entityType: Machine
+    entityIdentifier: DeviceId
+actions:
+  - actionType: IsolateMachine
+queryText: DeviceEvents
+"@
+            $tempFile = Join-Path TestDrive: 'body-plain.yaml'
+            $testYaml | Out-File -FilePath $tempFile -Encoding UTF8
+
+            Deploy-CustomDetection -InputFile $tempFile -Confirm:$false | Out-Null
+
+            function Find-WrappedValue {
+                param($Value, [string]$Path)
+                if ($null -eq $Value) { return }
+                if ($Value -is [string] -or $Value -is [ValueType]) {
+                    if ($Value -is [psobject]) { return $Path }
+                    return
+                }
+                if ($Value -is [System.Collections.IDictionary]) {
+                    foreach ($k in $Value.Keys) { Find-WrappedValue -Value $Value[$k] -Path "$Path.$k" }
+                    return
+                }
+                if ($Value -is [System.Collections.IEnumerable]) {
+                    $i = 0
+                    foreach ($item in $Value) { Find-WrappedValue -Value $item -Path "$Path[$i]"; $i++ }
+                    return
+                }
+                foreach ($p in $Value.PSObject.Properties) { Find-WrappedValue -Value $p.Value -Path "$Path.$($p.Name)" }
+            }
+            $wrapped = @(Find-WrappedValue -Value $script:CapturedBody -Path 'body')
+            $wrapped | Should -BeNullOrEmpty
+        }
+
+        It 'Should clear the id cache after a create' {
+            $testYaml = @"
+guid: 81fb771a-c57e-41b8-9905-63dbf267c13f
+ruleName: BODY-Cache
+alertTitle: Test
+frequency: 1H
+alertSeverity: Medium
+alertDescription: Test
+alertCategory: DefenseEvasion
+queryText: DeviceEvents
+"@
+            $tempFile = Join-Path TestDrive: 'body-cache.yaml'
+            $testYaml | Out-File -FilePath $tempFile -Encoding UTF8
+
+            Deploy-CustomDetection -InputFile $tempFile -Confirm:$false | Out-Null
+            InModuleScope XDRConverter {
+                $script:DetectionIdsCache.Data | Should -BeNullOrEmpty
+            }
+        }
+
+        It 'Should PATCH without the id property' {
+            $guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'
+            Mock Get-CustomDetectionIdByDetectorId { return '48' } -ModuleName XDRConverter
+            Mock Get-CustomDetection {
+                return @{
+                    id              = '48'
+                    displayName     = 'OLD'
+                    status          = 'enabled'
+                    detectionAction = @{ alertTemplate = @{ title = 'Old'; description = "Old [$guid]"; severity = 'low'; tactics = @(@{ tactic = 'DefenseEvasion' }) } }
+                    queryCondition  = @{ queryText = 'DeviceEvents' }
+                    schedule        = @{ frequency = 'PT1H' }
+                }
+            } -ModuleName XDRConverter
+
+            $testYaml = @"
+guid: $guid
+ruleName: BODY-Patch
+alertTitle: Test
+frequency: 1H
+alertSeverity: Medium
+alertDescription: Test
+alertCategory: DefenseEvasion
+queryText: DeviceEvents
+"@
+            $tempFile = Join-Path TestDrive: 'body-patch.yaml'
+            $testYaml | Out-File -FilePath $tempFile -Encoding UTF8
+
+            $result = Deploy-CustomDetection -InputFile $tempFile -Confirm:$false
+            $result.Action | Should -Be 'Updated'
+            $result.RuleId | Should -Be '48'
+            $script:CapturedMethod | Should -Be 'PATCH'
+            $script:CapturedBody.Keys | Should -Not -Contain 'id'
+            $script:CapturedBody.displayName | Should -Be 'BODY-Patch'
+
+            # Every collection is present on PATCH so a removed action or entity is cleared server-side
+            @($script:CapturedBody.detectionAction.automatedActions.Keys).Count | Should -Be 16
+            @($script:CapturedBody.detectionAction.automatedActions.isolateDevices).Count | Should -Be 0
+            @($script:CapturedBody.detectionAction.alertTemplate.entityMappings.Keys).Count | Should -Be 17
+            @($script:CapturedBody.detectionAction.organizationalScope.deviceGroups).Count | Should -Be 0
+        }
+
+        It 'Should POST only the populated collections' {
+            $testYaml = @"
+guid: 81fb771a-c57e-41b8-9905-63dbf267c13f
+ruleName: BODY-Post-Sparse
+alertTitle: Test
+frequency: 1H
+alertSeverity: Medium
+alertDescription: Test
+alertCategory: DefenseEvasion
+queryText: DeviceEvents
+"@
+            $tempFile = Join-Path TestDrive: 'body-post-sparse.yaml'
+            $testYaml | Out-File -FilePath $tempFile -Encoding UTF8
+
+            Deploy-CustomDetection -InputFile $tempFile -Confirm:$false | Out-Null
+            $script:CapturedMethod | Should -Be 'POST'
+            $script:CapturedBody.detectionAction.Keys | Should -Not -Contain 'automatedActions'
+            $script:CapturedBody.detectionAction.Keys | Should -Not -Contain 'organizationalScope'
+            $script:CapturedBody.detectionAction.alertTemplate.Keys | Should -Not -Contain 'entityMappings'
+        }
+
+        It 'Should skip an unchanged rule returned in the dual old-plus-new shape' {
+            $guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'
+            Mock Get-CustomDetectionIdByDetectorId { return '48' } -ModuleName XDRConverter
+            Mock Get-CustomDetection {
+                return @{
+                    id              = '48'
+                    detectorId      = 'f687512c-0654-4999-a0ac-d5906ffc3972'
+                    displayName     = 'DUAL'
+                    isEnabled       = $true
+                    status          = 'enabled'
+                    detectionAction = @{
+                        alertTemplate    = @{
+                            title           = 'Test'
+                            description     = "Test [$guid]"
+                            severity        = 'medium'
+                            category        = 'DefenseEvasion'
+                            mitreTechniques = @('T1562', 'T1562.001')
+                            tactics         = @(@{ tactic = 'DefenseEvasion'; techniques = @(@{ technique = 'T1562'; subTechniques = @('T1562.001') }) })
+                            impactedAssets  = @(@{ '@odata.type' = '#microsoft.graph.security.impactedDeviceAsset'; identifier = 'deviceId' })
+                            entityMappings  = @{ hosts = @(@{ deviceIdColumn = 'DeviceId'; nameColumn = '' }); accounts = $null }
+                        }
+                        responseActions  = @(@{ '@odata.type' = '#microsoft.graph.security.isolateDeviceResponseAction'; identifier = 'deviceId'; isolationType = 'full' })
+                        automatedActions = @{ isolateDevices = @(@{ deviceIdColumn = 'DeviceId'; isolationType = 'full' }); allowFiles = $null }
+                    }
+                    queryCondition  = @{ queryText = 'DeviceEvents' }
+                    schedule        = @{ period = '1H'; frequency = 'PT1H' }
+                }
+            } -ModuleName XDRConverter
+
+            $testYaml = @"
+guid: $guid
+ruleName: DUAL
+isEnabled: true
+alertTitle: Test
+frequency: 1H
+alertSeverity: Medium
+alertDescription: Test
+alertCategory: DefenseEvasion
+mitreTechniques:
+  - T1562.001
+impactedEntities:
+  - entityType: Machine
+    entityIdentifier: DeviceId
+actions:
+  - actionType: IsolateMachine
+queryText: DeviceEvents
+"@
+            $tempFile = Join-Path TestDrive: 'body-dual.yaml'
+            $testYaml | Out-File -FilePath $tempFile -Encoding UTF8
+
+            $result = Deploy-CustomDetection -InputFile $tempFile -Confirm:$false
+            $result.Action | Should -Be 'Skipped'
+            Should -Not -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter
+        }
+
+        It 'Should deploy a corpus-style file through the consumer call shape' {
+            $testYaml = @"
+actions:
+- actionType: IsolateMachine
+  additionalFields:
+    isolationType: Full
+alertCategory: InitialAccess
+alertDescription: Desc
+alertRecommendedAction: |
+  Do things.
+alertSeverity: High
+alertTitle: '[X] Title'
+frequency: 0
+guid: 9b5a2396-03e3-4bdb-8355-8e3fb3a3d22d
+impactedEntities:
+- entityIdentifier: DeviceId
+  entityType: Machine
+- entityIdentifier: InitiatingProcessAccountUpn
+  entityType: User
+isEnabled: true
+organizationalScope: []
+queryText: |
+  DeviceFileEvents
+  | take 1
+ruleName: CORPUS-Rule
+"@
+            $tempFile = Join-Path TestDrive: 'corpus.yml'
+            $testYaml | Out-File -FilePath $tempFile -Encoding UTF8
+
+            $params = @{
+                InputFile                    = $tempFile
+                DescriptionTagPrefix         = 'PREFIX'
+                SkipIdentifierValidation     = $true
+                SkipMitreTechniqueValidation = $true
+            }
+            $result = Deploy-CustomDetection @params -Confirm:$false
+            $result.Action | Should -Be 'Created'
+            $script:CapturedBody.schedule.frequency | Should -Be 'PT0S'
+            $script:CapturedBody.detectionAction.alertTemplate.description | Should -Match '\[PREFIX:9b5a2396-03e3-4bdb-8355-8e3fb3a3d22d\]$'
+            $script:CapturedBody.detectionAction.alertTemplate.entityMappings.accounts[0].upnColumn | Should -Be 'InitiatingProcessAccountUpn'
+            $script:CapturedBody.detectionAction.Keys | Should -Not -Contain 'organizationalScope'
         }
     }
 
@@ -439,6 +719,53 @@ queryText: DeviceEvents
             $result.Action | Should -Be 'Skipped'
             $result.Reason | Should -Be 'No changes detected'
             Should -Not -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter
+        }
+
+        It 'Should update when only the response actions changed' {
+            $guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'
+            Mock Get-CustomDetectionIdByDetectorId { return 'existing-id' } -ModuleName XDRConverter
+            Mock Get-CustomDetection {
+                return @{
+                    id              = 'existing-id'
+                    detectorId      = $guid
+                    displayName     = 'PREFIX-TEST'
+                    isEnabled       = $true
+                    detectionAction = @{
+                        alertTemplate   = @{
+                            title       = 'Test'
+                            description = "My desc [$guid]"
+                            severity    = 'medium'
+                            category    = 'DefenseEvasion'
+                        }
+                        responseActions = @(
+                            @{ '@odata.type' = '#microsoft.graph.security.isolateDeviceResponseAction'; identifier = 'deviceId'; isolationType = 'full' }
+                        )
+                    }
+                    queryCondition  = @{ queryText = 'DeviceEvents' }
+                    schedule        = @{ period = '0' }
+                }
+            } -ModuleName XDRConverter
+            Mock Invoke-MgGraphRequest {} -ModuleName XDRConverter
+
+            $testYaml = @"
+guid: $guid
+ruleName: PREFIX-TEST
+isEnabled: true
+alertTitle: Test
+frequency: 0
+alertSeverity: Medium
+alertDescription: My desc
+alertCategory: DefenseEvasion
+actions:
+  - actionType: RestrictAppExecution
+queryText: DeviceEvents
+"@
+            $tempFile = Join-Path TestDrive: 'update-actions-only.yaml'
+            $testYaml | Out-File -FilePath $tempFile -Encoding UTF8
+
+            $result = Deploy-CustomDetection -InputFile $tempFile -Confirm:$false
+            $result.Action | Should -Be 'Updated'
+            Should -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -ParameterFilter { $Method -eq 'PATCH' }
         }
 
         It 'Should find rule by description UUID tag when detectorId lookup fails' {

@@ -14,8 +14,8 @@ The XDRConverter module provides cmdlets to work with Microsoft Defender XDR cus
 | `ConvertTo-CustomDetectionYaml` | Converts JSON detection rules to YAML format (schema-compliant) |
 | `Deploy-CustomDetection` | Deploys detection rules to Defender XDR via Microsoft Graph API |
 | `Get-CustomDetection` | Retrieves detection rules from Defender XDR |
-| `Get-CustomDetectionIds` | Lists detection rule IDs with detector IDs and description tags (cached) |
-| `Get-CustomDetectionIdByDetectorId` | Looks up a detection rule ID by its detector ID |
+| `Get-CustomDetectionIds` | Lists detection rule IDs with their description tags (cached) |
+| `Get-CustomDetectionIdByDetectorId` | Looks up a detection rule ID by its guid (rule id or legacy detector ID) |
 | `Get-CustomDetectionIdByDescriptionTag` | Looks up a detection rule ID by its description tag UUID |
 | `Remove-CustomDetection` | Removes a detection rule from Defender XDR |
 | `Test-CustomDetectionMitreTechnique` | Validates MITRE ATT&CK techniques against XDR-supported categories |
@@ -57,9 +57,9 @@ Converts a YAML Defender XDR detection file to JSON format. Supports file input,
 | InputObject | PSObject | Yes* | JSON detection rule object; accepts pipeline input (*Object parameter sets) |
 | OutputFile | String | No | Path to the output JSON file. If not specified, outputs to stdout |
 | UseDisplayNameAsFilename | Switch | No | Use the rule's display name as the output filename (.json) |
-| UseIdAsFilename | Switch | No | Use the rule's detectorId as the output filename (.json) |
+| UseIdAsFilename | Switch | No | Use the rule's guid as the output filename (.json). Taken from the description tag, then a UUID rule id, then the legacy detectorId |
 | OutputFolder | String | No | Folder for output when using `-UseDisplayNameAsFilename` or `-UseIdAsFilename` (defaults to temp directory) |
-| Enabled | Boolean | No | Set the `isEnabled` property to this value |
+| Enabled | Boolean | No | Set the rule status to enabled (`$true`) or disabled (`$false`) |
 | Severity | String | No | Override the alert severity (`Informational`, `Low`, `Medium`, `High`) |
 | SkipIdentifierValidation | Switch | No | Allow impacted entity identifiers not listed in the official documentation (emits a warning instead of throwing) |
 
@@ -99,9 +99,9 @@ Converts a JSON Defender XDR detection file to YAML format. Properties not defin
 | InputObject | PSObject | Yes* | JSON detection rule object; accepts pipeline input (*Object parameter sets) |
 | OutputFile | String | No | Path to the output YAML file. If not specified, outputs to stdout |
 | UseDisplayNameAsFilename | Switch | No | Use the rule's display name as the output filename (.yaml) |
-| UseIdAsFilename | Switch | No | Use the rule's detectorId as the output filename (.yaml) |
+| UseIdAsFilename | Switch | No | Use the rule's guid as the output filename (.yaml). Taken from the description tag, then a UUID rule id, then the legacy detectorId |
 | OutputFolder | String | No | Folder for output when using `-UseDisplayNameAsFilename` or `-UseIdAsFilename` (defaults to temp directory) |
-| Enabled | Boolean | No | Set the `isEnabled` property to this value |
+| Enabled | Boolean | No | Set the rule status to enabled (`$true`) or disabled (`$false`) |
 | Severity | String | No | Override the alert severity (`Informational`, `Low`, `Medium`, `High`) |
 
 #### Examples
@@ -119,7 +119,7 @@ ConvertTo-CustomDetectionYaml -InputFile .\output.json -Enabled $true
 # Pipeline: export all rules from Defender XDR to YAML files named by display name
 Get-CustomDetection | ConvertTo-CustomDetectionYaml -UseDisplayNameAsFilename -OutputFolder 'C:\Detections'
 
-# Pipeline: export all rules to YAML files named by detectorId
+# Pipeline: export all rules to YAML files named by guid
 Get-CustomDetection | ConvertTo-CustomDetectionYaml -UseIdAsFilename
 ```
 
@@ -127,7 +127,7 @@ Get-CustomDetection | ConvertTo-CustomDetectionYaml -UseIdAsFilename
 
 ### Deploy-CustomDetection
 
-Creates or updates a Defender XDR custom detection rule from a YAML or JSON file via the Microsoft Graph API. Automatically detects whether the rule already exists (by detectorId or description tag) and issues a PATCH (update) or POST (create) accordingly. Before updating, it compares the local rule against the remote version and skips the call when nothing changed.
+Creates or updates a Defender XDR custom detection rule from a YAML or JSON file via the Microsoft Graph API. New rules are created with the YAML `guid` as their rule id. The cmdlet detects whether the rule already exists (by rule id or description tag) and issues a PATCH (update) or POST (create) accordingly. Before updating, it compares the local rule against the remote version and skips the call when nothing changed. The comparison covers every managed property, including tactics, entity mappings, automated actions and device groups.
 
 #### Parameters
 
@@ -136,13 +136,13 @@ Creates or updates a Defender XDR custom detection rule from a YAML or JSON file
 | InputFile | String | Yes | Path to the input YAML (`.yaml`/`.yml`) or JSON (`.json`) file. Accepts pipeline input. |
 | Severity | String | No | Override the alert severity (`Informational`, `Low`, `Medium`, `High`) |
 | TitlePrefix | String | No | String prepended to the rule's `displayName` and `alertTitle` |
-| Disabled | Switch | No | Deploy the rule with `isEnabled = $false` regardless of the file value |
+| Disabled | Switch | No | Deploy the rule with `status = disabled` regardless of the file value |
 | NoDescriptionTag | Switch | No | Do not append a `[<UUID>]` tag to the description |
 | DescriptionTagPrefix | String | No | Prefix inside the description tag, e.g. `PREFIX` produces `[PREFIX:<UUID>]` |
 | ParameterFile | String | No | Path to a YAML parameter file for query variable replacement (see below) |
 | Force | Switch | No | Skip change-detection and always push the rule to the API |
-| SkipIdentifierValidation | Switch | No | Allow impacted entity identifiers not listed in the official documentation (emits a warning instead of throwing) |
-| SkipMitreTechniqueValidation | Switch | No | Skip the pre-deployment check that verifies MITRE ATT&CK techniques are supported by XDR for the selected alert category |
+| SkipIdentifierValidation | Switch | No | Allow entity identifiers and mapping columns not listed in the official documentation (emits a warning instead of throwing) |
+| SkipMitreTechniqueValidation | Switch | No | Skip the pre-deployment check that verifies MITRE ATT&CK techniques are supported by XDR for each tactic |
 | WhatIf | Switch | No | Shows what changes would be made without applying them |
 | Confirm | Switch | No | Prompts for confirmation before creating or updating each rule |
 
@@ -214,7 +214,7 @@ Returns a `PSCustomObject` with:
 | Property | Type | Description |
 | --- | --- | --- |
 | IsValid | Boolean | `$true` if all listed techniques are supported for the category |
-| Category | String | The `alertCategory` value |
+| Category | String | The tactic name, or a comma separated list when the rule lists several tactics |
 | ValidTechniques | String[] | Techniques that are supported for the category |
 | InvalidTechniques | String[] | Techniques that are NOT supported for the category |
 
@@ -267,13 +267,13 @@ Get-CustomDetection -DetectionId '81fb771a-c57e-41b8-9905-63dbf267c13f' |
 
 ### Get-CustomDetectionIds
 
-Lists detection rule IDs with their detector IDs, description tags, and tag prefixes. Results are cached for the specified duration (default: 60 minutes) to reduce API calls.
+Lists detection rule IDs with their description tags and tag prefixes. Results are cached for the specified duration (default: 60 minutes) to reduce API calls. The cache is cleared automatically after a rule is created or deleted.
 
 The output includes:
 - **Id**: The detection rule ID
-- **DetectorId**: The detector ID (GUID)
-- **DescriptionTag**: The UUID extracted from the description tag (e.g., from `[CSOC:uuid]` or `[uuid]`)
-- **TagPrefix**: The prefix text from the description tag (e.g., `CSOC` from `[CSOC:uuid]`, or `$null` if no prefix)
+- **DetectorId**: Compatibility column. Carries the legacy detector ID while the API still returns it, otherwise the rule ID
+- **DescriptionTag**: The UUID extracted from the description tag (e.g., from `[PREFIX:uuid]` or `[uuid]`)
+- **TagPrefix**: The prefix text from the description tag (e.g., `PREFIX` from `[PREFIX:uuid]`, or `$null` if no prefix)
 
 #### Parameters
 
@@ -299,18 +299,18 @@ Get-CustomDetectionIds -CacheTtlMinutes 10
 
 ### Get-CustomDetectionIdByDetectorId
 
-Returns the detection rule ID for a given detector ID (GUID). Uses the cached output of `Get-CustomDetectionIds`.
+Returns the detection rule ID for a given guid. The guid is matched against the rule ID first and against the legacy detector ID second. Uses the cached output of `Get-CustomDetectionIds`.
 
 #### Parameters
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| DetectorId | String | Yes | The detectorId (GUID) to look up. Accepts pipeline input. |
+| DetectorId | String | Yes | The guid to look up. Accepts pipeline input. |
 
 #### Examples
 
 ```powershell
-# Look up a detection rule ID by its detector ID
+# Look up a detection rule ID by its guid
 Get-CustomDetectionIdByDetectorId -DetectorId '81fb771a-c57e-41b8-9905-63dbf267c13f'
 ```
 
@@ -337,14 +337,14 @@ Get-CustomDetectionIdByDescriptionTag -DescriptionTag '81fb771a-c57e-41b8-9905-6
 
 ### Remove-CustomDetection
 
-Deletes a custom detection rule from Microsoft Defender XDR. The rule can be identified by its detection rule ID, its DetectorId (the GUID from the source file), or by the DescriptionTag UUID appended to the alert description during deployment.
+Deletes a custom detection rule from Microsoft Defender XDR. The rule can be identified by its detection rule ID, by the guid from the source file (matched against the rule ID and the legacy detector ID), or by the DescriptionTag UUID appended to the alert description during deployment.
 
 #### Parameters
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | Id | String | Yes* | The detection rule ID as returned by the Graph API (*ById parameter set) |
-| DetectorId | String | Yes* | The detector ID (GUID from the source file) (*ByDetectorId parameter set) |
+| DetectorId | String | Yes* | The guid from the source file (*ByDetectorId parameter set) |
 | DescriptionTag | String | Yes* | The UUID tag embedded in the alert description (*ByDescriptionTag parameter set) |
 | WhatIf | Switch | No | Shows what changes would be made without applying them |
 | Confirm | Switch | No | Prompts for confirmation before deleting the rule |
@@ -366,24 +366,86 @@ Remove-CustomDetection -DescriptionTag '81fb771a-c57e-41b8-9905-63dbf267c13f'
 
 ## Property Mapping
 
+The Graph API deprecated several `detectionRule` properties and removes them on 2026-10-01. The module writes only the current properties. Legacy YAML keys are still accepted and translated at conversion time, so existing rule files keep deploying. When a legacy key and its replacement are both present, the replacement wins.
+
 ### YAML to JSON
 
-| YAML Property          | JSON Path                                        |
-| ---------------------- | ------------------------------------------------ |
-| guid                   | detectorId                                       |
-| ruleName               | displayName                                      |
-| isEnabled              | isEnabled                                        |
-| alertTitle             | detectionAction.alertTemplate.title              |
-| frequency              | schedule.period                                  |
-| alertSeverity          | detectionAction.alertTemplate.severity           |
-| alertDescription       | detectionAction.alertTemplate.description        |
-| alertRecommendedAction | detectionAction.alertTemplate.recommendedActions |
-| alertCategory          | detectionAction.alertTemplate.category           |
-| mitreTechniques        | detectionAction.alertTemplate.mitreTechniques    |
-| impactedEntities       | detectionAction.alertTemplate.impactedAssets     |
-| organizationalScope    | detectionAction.organizationalScope              |
-| actions                | detectionAction.responseActions                  |
-| queryText              | queryCondition.queryText                         |
+| YAML key | Required | Graph property | Notes |
+| --- | --- | --- | --- |
+| guid | Yes | `id` | Used as the rule id on create and as the description tag. `id` is accepted as an alias |
+| ruleName | Yes | `displayName` | |
+| description | No | `description` | Rule description shown in the portal rule list |
+| status | No | `status` | `enabled`, `disabled` or `autoDisabled`. Wins over `isEnabled` |
+| isEnabled | No | `status` | Legacy. `true` becomes `enabled`, `false` becomes `disabled`. Defaults to enabled |
+| frequency | Yes | `schedule.frequency` | ISO 8601 duration (`PT0S`, `PT1H`, `PT3H`, `PT12H`, `P1D`). Legacy tokens `0`, `1H`, `3H`, `12H`, `24H` are translated |
+| alertTitle | Yes | `detectionAction.alertTemplate.title` | |
+| alertSeverity | Yes | `detectionAction.alertTemplate.severity` | |
+| alertDescription | Yes | `detectionAction.alertTemplate.description` | The description tag is appended on deploy |
+| alertRecommendedAction | No | `detectionAction.alertTemplate.recommendedActions` | |
+| tactics | One of | `detectionAction.alertTemplate.tactics` | One `{ tactic, techniques }` entry. The API rejects more than one tactic per rule. Techniques may be plain ids or `{ technique, subTechniques }`. Wins over `alertCategory` and `mitreTechniques` |
+| alertCategory | One of | `detectionAction.alertTemplate.tactics[0].tactic` | Legacy. Becomes the single tactic |
+| mitreTechniques | No | `detectionAction.alertTemplate.tactics[0].techniques` | Legacy flat list. Sub-techniques are grouped under their parent technique |
+| entityMappings | No | `detectionAction.alertTemplate.entityMappings` | Object keyed by entity collection (`accounts`, `hosts`, `mailboxes`, `files`, `ips`, `urls`, ...) holding column mappings. Wins over `impactedEntities` |
+| impactedEntities | No | `detectionAction.alertTemplate.entityMappings` | Legacy `{ entityType, entityIdentifier }` list. `Machine`/`Device` map to `hosts`, `User`/`Account` to `accounts`, `Mailbox` to `mailboxes` |
+| customDetails | No | `detectionAction.alertTemplate.customDetails` | Up to 20 name to column pairs |
+| organizationalScope | No | `detectionAction.organizationalScope.deviceGroups` | Device group names. An empty list is omitted |
+| actions | No | `detectionAction.automatedActions` | List of `{ actionType, additionalFields }`. See the action table |
+| queryText | Yes | `queryCondition.queryText` | |
+
+### Legacy entity identifiers
+
+Each `impactedEntities` entry becomes one column in the matching `entityMappings` collection. The column value is the identifier name. Entries of the same type merge into one item until a column is already taken.
+
+| entityType | entityIdentifier | Collection and column |
+| --- | --- | --- |
+| Machine / Device | deviceId | `hosts.deviceIdColumn` |
+| Machine / Device | deviceName, remoteDeviceName, targetDeviceName, destinationDeviceName | `hosts.nameColumn` |
+| User / Account | accountObjectId, recipientObjectId, processAccountObjectId, initiatingProcessAccountObjectId, servicePrincipalId | `accounts.aadUserIdColumn` |
+| User / Account | accountSid, requestAccountSid, initiatingAccountSid, initiatingProcessAccountSid | `accounts.sidColumn` |
+| User / Account | accountUpn, initiatingProcessAccountUpn, targetAccountUpn | `accounts.upnColumn` |
+| User / Account | accountName, requestAccountName, initiatingAccountName, servicePrincipalName, accountId | `accounts.nameColumn` |
+| User / Account | accountDomain, requestAccountDomain, initiatingAccountDomain | `accounts.ntDomainColumn` |
+| Mailbox | any documented mailbox identifier | `mailboxes.primaryAddressColumn` |
+
+### Actions
+
+`actionType` selects the `automatedActions` collection. `additionalFields` overrides the default columns.
+
+| actionType | Collection | Default columns |
+| --- | --- | --- |
+| IsolateMachine | isolateDevices | `deviceIdColumn: DeviceId`, `isolationType: Full` |
+| CollectInvestigationPackage | collectInvestigationPackages | `deviceIdColumn: DeviceId` |
+| RunAntivirusScan | runAntivirusScans | `deviceIdColumn: DeviceId` |
+| InitiateInvestigation | initiateInvestigations | `deviceIdColumn: DeviceId` |
+| RestrictAppExecution | restrictAppExecutions | `deviceIdColumn: DeviceId` |
+| StopAndQuarantineFile | stopAndQuarantineFiles | `deviceIdColumn: DeviceId`, `sha1Column: SHA1` |
+| AllowFile | allowFiles | `sha1Column: SHA1`, optional `deviceGroupNames`. The API stores one hash column, so an explicit `sha256Column` replaces the default |
+| BlockFile | blockFiles | `sha1Column: SHA1`, optional `deviceGroupNames`. The API stores one hash column, so an explicit `sha256Column` replaces the default |
+| DisableUser | disableUsers | `accountSidColumn: AccountSid` |
+| ForceUserPasswordReset | forceUserPasswordResets | `accountSidColumn: AccountSid` |
+| MarkUserAsCompromised | markUsersAsCompromised | `accountObjectIdColumn: AccountObjectId` |
+| HardDeleteEmail | hardDeleteEmails | `networkMessageIdColumn: NetworkMessageId`, `recipientColumn: RecipientEmailAddress` |
+| SoftDeleteEmail | softDeleteEmails | as HardDeleteEmail |
+| MoveEmailToInbox | moveEmailsToInbox | as HardDeleteEmail |
+| MoveEmailToJunk | moveEmailsToJunk | as HardDeleteEmail |
+| MoveEmailToDeletedItems | moveEmailsToDeletedItems | as HardDeleteEmail |
+
+### Updates
+
+The API keeps any collection that a PATCH omits. An update therefore names every automated action and entity mapping collection, sending an empty list for the ones the YAML file does not use, and sends empty device groups when none are set. Removing an action, an entity mapping or a device group from the file removes it from the rule. Custom details are the exception. No PATCH shape clears them, so a rule keeps its custom details when the file stops setting them, and the deploy warns about it. Custom detail values must be columns the query projects.
+
+### JSON to YAML
+
+`ConvertTo-CustomDetectionYaml` always emits the current keys: `frequency` as an ISO 8601 duration, `tactics`, `entityMappings`, `actions` with their column mapping, `customDetails`, `description` and `organizationalScope` as a plain list. `isEnabled` is kept for compatibility and `status` is added only for `autoDisabled`. Rules returned with the legacy properties are translated, so converting an old rule upgrades its YAML file.
+
+### Upgrading existing YAML files
+
+No change is required. Legacy files deploy unchanged. To rewrite a file with the current keys, round-trip it:
+
+```powershell
+ConvertTo-CustomDetectionJson -InputFile .\rule.yaml -OutputFile .\rule.json
+ConvertTo-CustomDetectionYaml -InputFile .\rule.json -OutputFile .\rule.yaml
+```
 
 ## Common Workflows
 
@@ -467,6 +529,29 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 ```
 
 ## Changelog
+
+### 2.0.0
+
+- **Breaking change**: the JSON produced by `ConvertTo-CustomDetectionJson` and the YAML produced by `ConvertTo-CustomDetectionYaml` changed shape
+- Request bodies now use the current Graph `detectionRule` properties: `status`, `schedule.frequency`, `tactics`, `entityMappings`, `automatedActions` and `organizationalScope.deviceGroups`. The deprecated `detectorId`, `isEnabled`, `period`, `category`, `mitreTechniques`, `impactedAssets` and `responseActions` properties are no longer written
+- Legacy YAML keys are still accepted and translated. When a legacy key and its replacement are both present, the replacement wins
+- New optional YAML keys: `description`, `status`, `tactics`, `entityMappings`, `customDetails` and ISO 8601 `frequency` values
+- All 16 automated action types and all 17 entity mapping collections are supported
+- New rules are created with the YAML `guid` as their rule id. Existing rules are still found through the description tag
+- `ConvertTo-CustomDetectionYaml` emits the current keys and upgrades rules that still carry the legacy properties
+- Change detection compares every managed property, so changes to actions, entity mappings, techniques or device groups trigger an update
+- The detection id cache is cleared after a create or delete
+- JSON input files are normalised before deployment, so legacy JSON exports deploy with the current body
+- `Test-CustomDetectionMitreTechnique` accepts a `tactics` list and validates each tactic
+- `ConvertTo-CustomDetectionYaml -LegacyKeys` emits the legacy YAML keys for files that must stay in the old form
+- Request bodies are stripped of PowerShell object wrappers before they reach the Graph client, which rejected them with a self-referencing loop error
+- Updates name every action and entity mapping collection, so an action or entity removed from the file is removed from the rule
+- Bugs/issues or undocumented behavior identified while testing: 
+   - `PT0S` and non-MITRE tactic names such as `SuspiciousActivity` are accepted on create
+   - `autoDisabled` is rejected on write and is sent as `disabled`
+   - The API accepts one tactic per rule
+   - File actions keep one hash column
+   - Custom details cannot be cleared once set
 
 ### 1.4.1
 - Included Graph API error details in deployment failure messages for easier troubleshooting
