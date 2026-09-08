@@ -346,7 +346,7 @@ queryText: DeviceEvents
             }
         }
 
-        It 'Should POST the guid as id with the current property names' {
+        It 'Should POST without an id and with the current property names' {
             $testYaml = @"
 guid: 81fb771a-c57e-41b8-9905-63dbf267c13f
 ruleName: BODY-Create
@@ -374,7 +374,7 @@ queryText: DeviceEvents
             $script:CapturedMethod | Should -Be 'POST'
 
             $body = $script:CapturedBody
-            $body.id | Should -Be '81fb771a-c57e-41b8-9905-63dbf267c13f'
+            $body.Keys | Should -Not -Contain 'id'
             $body.status | Should -Be 'enabled'
             $body.schedule.frequency | Should -Be 'PT1H'
             $body.detectionAction.alertTemplate.tactics[0].tactic | Should -Be 'DefenseEvasion'

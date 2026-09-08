@@ -177,6 +177,15 @@ Describe 'Compare-CustomDetection' {
         }
     }
 
+    It 'Treats an emptied remote account mapping and a local rule without accounts as equal' {
+        $local = New-LocalBody
+        $remote = New-RemoteRule
+        $remote.detectionAction.alertTemplate.entityMappings.accounts = @([PSCustomObject]@{ aadUserIdColumn = ''; nameColumn = ''; ntDomainColumn = ''; sidColumn = ''; upnColumn = '' })
+        InModuleScope XDRConverter -Parameters @{ Local = $local; Remote = $remote } {
+            Compare-CustomDetection -Local $Local -Remote $Remote | Should -BeFalse
+        }
+    }
+
     It 'Treats an absent optional value and an empty remote value as equal' {
         $local = New-LocalBody -Overrides @{ 'detectionAction.organizationalScope' = $null }
         $remote = New-RemoteRule

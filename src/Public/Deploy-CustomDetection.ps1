@@ -320,7 +320,10 @@ function Deploy-CustomDetection {
             } else {
                 # Create new rule via POST
                 if ($PSCmdlet.ShouldProcess("Rule '$ruleName'", 'Create detection rule')) {
-                    $response = Invoke-MgGraphRequestWithRetry -Method POST -Uri $baseUri -Body $jsonObj
+                    # The API assigns the rule id, so the guid travels in the description tag only
+                    $createBody = ConvertTo-CustomDetectionHashtable -InputObject $jsonObj
+                    $createBody.Remove('id')
+                    $response = Invoke-MgGraphRequestWithRetry -Method POST -Uri $baseUri -Body $createBody
                     $newId = $response.id
                     Clear-CustomDetectionIdsCache
                     Write-Verbose "Created rule '$ruleName' (Id: $newId, Guid: $detectorId)."

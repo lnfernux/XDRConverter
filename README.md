@@ -127,7 +127,7 @@ Get-CustomDetection | ConvertTo-CustomDetectionYaml -UseIdAsFilename
 
 ### Deploy-CustomDetection
 
-Creates or updates a Defender XDR custom detection rule from a YAML or JSON file via the Microsoft Graph API. New rules are created with the YAML `guid` as their rule id. The cmdlet detects whether the rule already exists (by rule id or description tag) and issues a PATCH (update) or POST (create) accordingly. Before updating, it compares the local rule against the remote version and skips the call when nothing changed. The comparison covers every managed property, including tactics, entity mappings, automated actions and device groups.
+Creates or updates a Defender XDR custom detection rule from a YAML or JSON file via the Microsoft Graph API. The API assigns the rule id on create, and the YAML `guid` travels in the description tag. The cmdlet detects whether the rule already exists (by description tag, or by rule id for rules that carry a UUID id) and issues a PATCH (update) or POST (create) accordingly. Before updating, it compares the local rule against the remote version and skips the call when nothing changed. The comparison covers every managed property, including tactics, entity mappings, automated actions and device groups.
 
 #### Parameters
 
@@ -372,7 +372,7 @@ The Graph API deprecated several `detectionRule` properties and removes them on 
 
 | YAML key | Required | Graph property | Notes |
 | --- | --- | --- | --- |
-| guid | Yes | `id` | Used as the rule id on create and as the description tag. `id` is accepted as an alias |
+| guid | Yes | `id` | Kept as `id` in the converted JSON and used as the description tag. It is not sent on create, because the API assigns rule ids and rejects ids that start with a digit. `id` is accepted as an alias |
 | ruleName | Yes | `displayName` | |
 | description | No | `description` | Rule description shown in the portal rule list |
 | status | No | `status` | `enabled`, `disabled` or `autoDisabled`. Wins over `isEnabled` |
@@ -394,7 +394,7 @@ The Graph API deprecated several `detectionRule` properties and removes them on 
 
 ### Legacy entity identifiers
 
-Each `impactedEntities` entry becomes one column in the matching `entityMappings` collection. The column value is the identifier name. Entries of the same type merge into one item until a column is already taken.
+Each `impactedEntities` entry becomes one column in the matching `entityMappings` collection. The column value is the identifier name. Entries of the same type merge into one item until a column is already taken. An account item needs `aadUserIdColumn`, `sidColumn`, `upnColumn`, or `nameColumn` together with a domain column. An item that ends up with only a name or only a domain is dropped with a warning, which matches what the API did with the legacy property.
 
 | entityType | entityIdentifier | Collection and column |
 | --- | --- | --- |
@@ -537,7 +537,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - Legacy YAML keys are still accepted and translated. When a legacy key and its replacement are both present, the replacement wins
 - New optional YAML keys: `description`, `status`, `tactics`, `entityMappings`, `customDetails` and ISO 8601 `frequency` values
 - All 16 automated action types and all 17 entity mapping collections are supported
-- New rules are created with the YAML `guid` as their rule id. Existing rules are still found through the description tag
+- The API assigns rule ids on create. Rules are found through the description tag, or by rule id when the id is a UUID
 - `ConvertTo-CustomDetectionYaml` emits the current keys and upgrades rules that still carry the legacy properties
 - Change detection compares every managed property, so changes to actions, entity mappings, techniques or device groups trigger an update
 - The detection id cache is cleared after a create or delete
@@ -552,6 +552,8 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
    - The API accepts one tactic per rule
    - File actions keep one hash column
    - Custom details cannot be cleared once set
+   - A client-supplied rule id must start with a letter, so guids are not usable as rule ids
+   - An account entity mapping needs a key column or a name plus domain pair. A name-only mapping is rejected on write, while the legacy property was silently emptied
 
 ### 1.4.1
 - Included Graph API error details in deployment failure messages for easier troubleshooting

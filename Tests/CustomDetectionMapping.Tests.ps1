@@ -274,12 +274,50 @@ Describe 'CustomDetection mapping helpers' {
             @{ Identifier = 'initiatingProcessAccountSid'; Column = 'sidColumn' }
             @{ Identifier = 'RecipientObjectId'; Column = 'aadUserIdColumn' }
             @{ Identifier = 'ServicePrincipalId'; Column = 'aadUserIdColumn' }
-            @{ Identifier = 'AccountName'; Column = 'nameColumn' }
-            @{ Identifier = 'AccountDomain'; Column = 'ntDomainColumn' }
         ) {
             InModuleScope XDRConverter -Parameters @{ Identifier = $Identifier; Column = $Column } {
                 $result = ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @(@{ entityType = 'User'; entityIdentifier = $Identifier })
                 $result.accounts[0][$Column] | Should -Be ($Identifier.Substring(0, 1).ToUpper() + $Identifier.Substring(1))
+            }
+        }
+
+        It 'Drops a user mapping that carries only a name column and warns' -ForEach @(
+            @{ Identifier = 'AccountName' }
+            @{ Identifier = 'initiatingAccountName' }
+            @{ Identifier = 'AccountDomain' }
+        ) {
+            InModuleScope XDRConverter -Parameters @{ Identifier = $Identifier } {
+                $result = ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @(
+                    @{ entityType = 'Machine'; entityIdentifier = 'DeviceId' }
+                    @{ entityType = 'User'; entityIdentifier = $Identifier }
+                ) -WarningVariable w -WarningAction SilentlyContinue
+                $result.Keys | Should -Not -Contain 'accounts'
+                $result.hosts[0].deviceIdColumn | Should -Be 'DeviceId'
+                "$w" | Should -Match $Identifier
+            }
+        }
+
+        It 'Keeps the name column when a sid completes the account mapping' {
+            InModuleScope XDRConverter {
+                $result = ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @(
+                    @{ entityType = 'User'; entityIdentifier = 'AccountName' }
+                    @{ entityType = 'User'; entityIdentifier = 'AccountSid' }
+                ) -WarningVariable w -WarningAction SilentlyContinue
+                $result.accounts.Count | Should -Be 1
+                $result.accounts[0].nameColumn | Should -Be 'AccountName'
+                $result.accounts[0].sidColumn | Should -Be 'AccountSid'
+                $w.Count | Should -Be 0
+            }
+        }
+
+        It 'Keeps the name column when a domain completes the account mapping' {
+            InModuleScope XDRConverter {
+                $result = ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @(
+                    @{ entityType = 'User'; entityIdentifier = 'AccountName' }
+                    @{ entityType = 'User'; entityIdentifier = 'AccountDomain' }
+                )
+                $result.accounts[0].nameColumn | Should -Be 'AccountName'
+                $result.accounts[0].ntDomainColumn | Should -Be 'AccountDomain'
             }
         }
 
@@ -309,9 +347,9 @@ Describe 'CustomDetection mapping helpers' {
 
         It 'Warns and uses the default column for an unknown identifier with the skip switch' {
             InModuleScope XDRConverter {
-                $result = ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @(@{ entityType = 'User'; entityIdentifier = 'Bogus' }) -SkipIdentifierValidation -WarningVariable w -WarningAction SilentlyContinue
+                $result = ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @(@{ entityType = 'Machine'; entityIdentifier = 'Bogus' }) -SkipIdentifierValidation -WarningVariable w -WarningAction SilentlyContinue
                 $w | Should -Not -BeNullOrEmpty
-                $result.accounts[0].nameColumn | Should -Be 'Bogus'
+                $result.hosts[0].nameColumn | Should -Be 'Bogus'
             }
         }
 

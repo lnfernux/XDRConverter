@@ -110,6 +110,26 @@ function ConvertTo-CustomDetectionEntityMappings {
             $columnValue = $canonical.Substring(0, 1).ToUpperInvariant() + $canonical.Substring(1)
             Add-MappingColumn -Result $result -Collection $collection -Column $column -Value $columnValue
         }
+
+        # The API rejects an account mapping that has no key column and no name plus domain pair
+        if ($result.Contains('accounts')) {
+            $complete = [System.Collections.Generic.List[object]]::new()
+            foreach ($item in $result['accounts']) {
+                $hasKeyColumn = $item.Contains('aadUserIdColumn') -or $item.Contains('sidColumn') -or $item.Contains('upnColumn')
+                $hasNameAndDomain = $item.Contains('nameColumn') -and ($item.Contains('ntDomainColumn') -or $item.Contains('dnsDomainColumn') -or $item.Contains('upnSuffixColumn'))
+                if ($hasKeyColumn -or $hasNameAndDomain) {
+                    $complete.Add($item)
+                    continue
+                }
+                $columns = ($item.Keys | ForEach-Object { "$_ = $($item[$_])" }) -join ', '
+                Write-Warning "Account mapping ($columns) is dropped. The API needs aadUserIdColumn, sidColumn, upnColumn, or nameColumn together with a domain column."
+            }
+            if ($complete.Count -eq 0) {
+                $result.Remove('accounts')
+            } else {
+                $result['accounts'] = $complete
+            }
+        }
     } else {
         $mappings = ConvertTo-CustomDetectionHashtable -InputObject $EntityMappings
         foreach ($key in @($mappings.Keys)) {
