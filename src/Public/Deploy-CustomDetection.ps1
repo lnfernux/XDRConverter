@@ -12,10 +12,11 @@ function Deploy-CustomDetection {
         Use -DescriptionTagPrefix to add a prefix (e.g. "[PREFIX:<UUID>]") or
         -NoDescriptionTag to suppress the tag entirely.
 
-        The API assigns the rule id on create, and the guid travels in the
-        description tag. The function finds an existing rule through that tag,
-        through a UUID rule id, or, with -NoDescriptionTag, through the display
-        name, and issues a PATCH (update) instead of a POST (create). Before
+        New rules get the id "rule-<guid>", because the API wants a client id
+        that starts with a letter, and the guid also travels in the description
+        tag. The function finds an existing rule through that id, through the
+        tag, or, with -NoDescriptionTag, through the display name, and issues a
+        PATCH (update) instead of a POST (create). Before
         updating it compares the local rule against the remote version and skips the
         call when nothing changed.
 
@@ -334,9 +335,9 @@ function Deploy-CustomDetection {
             } else {
                 # Create new rule via POST
                 if ($PSCmdlet.ShouldProcess("Rule '$ruleName'", 'Create detection rule')) {
-                    # The API assigns the rule id, so the guid travels in the description tag only
+                    # The API wants a client id that starts with a letter, so the guid gets a prefix
                     $createBody = ConvertTo-CustomDetectionHashtable -InputObject $jsonObj
-                    $createBody.Remove('id')
+                    $createBody['id'] = "rule-$detectorId"
                     $response = Invoke-MgGraphRequestWithRetry -Method POST -Uri $baseUri -Body $createBody
                     $newId = $response.id
                     Clear-CustomDetectionIdsCache

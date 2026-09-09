@@ -37,8 +37,8 @@ function Get-CustomDetectionIdByDetectorId {
             # Leverage the cached detection IDs list
             $detectionIds = Get-CustomDetectionIds
 
-            # Match the rule id first, then the legacy detector id
-            $detectionRule = $detectionIds | Where-Object { $_.Id -eq $DetectorId -or $_.DetectorId -eq $DetectorId } | Select-Object -First 1
+            # Match the rule id first, in its plain and rule-prefixed forms, then the legacy detector id
+            $detectionRule = $detectionIds | Where-Object { $_.Id -eq $DetectorId -or $_.Id -eq "rule-$DetectorId" -or $_.DetectorId -eq $DetectorId } | Select-Object -First 1
 
             if ($detectionRule) {
                 return $detectionRule.Id

@@ -4,8 +4,8 @@ function Get-CustomDetectionIdentity {
         Returns the stable identifier of a detection rule object.
 
     .DESCRIPTION
-        Prefers the UUID from the description tag, then a UUID-shaped id,
-        then the legacy detectorId. Returns $null when none is present.
+        Prefers the UUID from the description tag, then a UUID-shaped or
+        rule-prefixed id, then the legacy detectorId. Returns $null when none is present.
     #>
     [CmdletBinding()]
     [OutputType([string])]
@@ -24,6 +24,9 @@ function Get-CustomDetectionIdentity {
     $id = "$($Rule.id)"
     if ($id -match "^$uuidPattern$") {
         return $id
+    }
+    if ($id -match "^rule-($uuidPattern)$") {
+        return $Matches[1]
     }
 
     $detectorId = "$($Rule.detectorId)"

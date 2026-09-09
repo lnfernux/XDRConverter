@@ -127,7 +127,7 @@ Get-CustomDetection | ConvertTo-CustomDetectionYaml -UseIdAsFilename
 
 ### Deploy-CustomDetection
 
-Creates or updates a Defender XDR custom detection rule from a YAML or JSON file via the Microsoft Graph API. The API assigns the rule id on create, and the YAML `guid` travels in the description tag. The cmdlet detects whether the rule already exists (by description tag, or by rule id for rules that carry a UUID id) and issues a PATCH (update) or POST (create) accordingly. Before updating, it compares the local rule against the remote version and skips the call when nothing changed. The comparison covers every managed property, including tactics, entity mappings, automated actions and device groups.
+Creates or updates a Defender XDR custom detection rule from a YAML or JSON file via the Microsoft Graph API. New rules get the rule id `rule-<guid>`, because the API wants a client id that starts with a letter, and the YAML `guid` also travels in the description tag. The cmdlet detects whether the rule already exists (by rule id, by description tag, or by display name with `-NoDescriptionTag`) and issues a PATCH (update) or POST (create) accordingly. Before updating, it compares the local rule against the remote version and skips the call when nothing changed. The comparison covers every managed property, including tactics, entity mappings, automated actions and device groups.
 
 #### Parameters
 
@@ -373,7 +373,7 @@ The Graph API deprecated several `detectionRule` properties and removes them on 
 
 | YAML key | Required | Graph property | Notes |
 | --- | --- | --- | --- |
-| guid | Yes | `id` | Kept as `id` in the converted JSON and used as the description tag. It is not sent on create, because the API assigns rule ids and rejects ids that start with a digit. `id` is accepted as an alias |
+| guid | Yes | `id` | Kept as `id` in the converted JSON and used as the description tag. Sent on create as `rule-<guid>`, because the API wants a client id that starts with a letter. `id` is accepted as an alias |
 | ruleName | Yes | `displayName` | |
 | description | No | `description` | Rule description shown in the portal rule list |
 | status | No | `status` | `enabled`, `disabled` or `autoDisabled`. Wins over `isEnabled` |
@@ -544,7 +544,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - Legacy YAML keys are still accepted and translated. When a legacy key and its replacement are both present, the replacement wins
 - New optional YAML keys: `description`, `status`, `tactics`, `entityMappings`, `customDetails` and ISO 8601 `frequency` values
 - All 16 automated action types and all 17 entity mapping collections are supported
-- The API assigns rule ids on create. Rules are found through the description tag, or by rule id when the id is a UUID
+- New rules get the rule id `rule-<guid>`. Rules are found through that id, through the description tag, or through the display name with `-NoDescriptionTag`
 - `ConvertTo-CustomDetectionYaml` emits the current keys and upgrades rules that still carry the legacy properties
 - Change detection compares every managed property, so changes to actions, entity mappings, techniques or device groups trigger an update
 - The detection id cache is cleared after a create or delete
@@ -555,6 +555,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - With `-NoDescriptionTag`, an existing rule is found through its display name, which the API keeps unique
 - `Get-CustomDetectionIds` carries the display name and no longer projects the list, so the legacy detector id stays available while the API returns it
 - A file action that names both hash columns is rejected before the request
+- An action field the Graph action type does not document is rejected before the request
 - OData annotations on entity mappings and automated actions are ignored
 - Request bodies are stripped of PowerShell object wrappers before they reach the Graph client, which rejected them with a self-referencing loop error
 - Updates name every action and entity mapping collection, so an action or entity removed from the file is removed from the rule
@@ -564,7 +565,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
    - The API accepts one tactic per rule
    - File actions keep one hash column
    - Custom details cannot be cleared once set
-   - A client-supplied rule id must start with a letter, so guids are not usable as rule ids
+   - A client-supplied rule id must start with a letter, so a guid needs a prefix
    - An account entity mapping needs a key column or a name plus domain pair. A name-only mapping is rejected on write, while the legacy property was silently emptied
 
 ### 1.4.1

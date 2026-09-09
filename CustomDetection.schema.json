@@ -27,7 +27,7 @@
     "properties": {
         "guid": {
             "$ref": "#/definitions/uuid",
-            "description": "A unique UUID that identifies the rule in its source files. It travels in the alert description tag. The API assigns the rule id"
+            "description": "A unique UUID that identifies the rule in its source files. New rules get the rule id rule-<guid> and the guid also travels in the alert description tag"
         },
         "id": {
             "$ref": "#/definitions/uuid",

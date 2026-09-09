@@ -498,6 +498,28 @@ Describe 'CustomDetection mapping helpers' {
         }
     }
 
+    Context 'Rule identity' {
+
+        It 'Get-CustomDetectionIdentity reads the guid out of a rule-prefixed id' {
+            InModuleScope XDRConverter {
+                $rule = [PSCustomObject]@{ id = 'rule-81fb771a-c57e-41b8-9905-63dbf267c13f'; detectionAction = [PSCustomObject]@{ alertTemplate = [PSCustomObject]@{ description = 'no tag here' } } }
+                Get-CustomDetectionIdentity -Rule $rule | Should -Be '81fb771a-c57e-41b8-9905-63dbf267c13f'
+            }
+        }
+
+        It 'Get-CustomDetectionIdByDetectorId matches a rule-prefixed id' {
+            InModuleScope XDRConverter {
+                Mock Assert-MgGraphConnection {}
+                $script:DetectionIdsCache = @{
+                    Data      = @([PSCustomObject]@{ Id = 'rule-81fb771a-c57e-41b8-9905-63dbf267c13f'; DetectorId = 'rule-81fb771a-c57e-41b8-9905-63dbf267c13f'; DisplayName = 'R'; DescriptionTag = $null; TagPrefix = $null })
+                    ExpiresAt = [datetime]::UtcNow.AddHours(1)
+                }
+                Get-CustomDetectionIdByDetectorId -DetectorId '81fb771a-c57e-41b8-9905-63dbf267c13f' | Should -Be 'rule-81fb771a-c57e-41b8-9905-63dbf267c13f'
+                $script:DetectionIdsCache = @{ Data = $null; ExpiresAt = [datetime]::MinValue }
+            }
+        }
+    }
+
     Context 'ConvertTo-CustomDetectionLegacyYaml' {
 
         It 'Drops a column the legacy identifiers cannot express and warns' {
@@ -755,6 +777,28 @@ Describe 'CustomDetection mapping helpers' {
         It 'Rejects a file action that names both hash columns' {
             InModuleScope XDRConverter {
                 { ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = 'BlockFile'; additionalFields = @{ sha1Column = 'SHA1'; sha256Column = 'SHA256' } }) } | Should -Throw '*one hash column*'
+            }
+        }
+    }
+
+    Context 'ConvertTo-CustomDetectionAutomatedActions documented fields' {
+
+        It 'Rejects a field the action type does not document' -ForEach @(
+            @{ ActionType = 'IsolateMachine'; Field = 'recipientColumn' }
+            @{ ActionType = 'StopAndQuarantineFile'; Field = 'sha256Column' }
+            @{ ActionType = 'DisableUser'; Field = 'deviceIdColumn' }
+            @{ ActionType = 'RunAntivirusScan'; Field = 'isolationType' }
+        ) {
+            InModuleScope XDRConverter -Parameters @{ ActionType = $ActionType; Field = $Field } {
+                { ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = $ActionType; additionalFields = @{ $Field = 'X' } }) } | Should -Throw "*$Field*"
+            }
+        }
+
+        It 'Accepts every documented field of a file action' {
+            InModuleScope XDRConverter {
+                $result = ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = 'AllowFile'; additionalFields = @{ sha256Column = 'SHA256'; deviceGroupNames = @('Servers') } })
+                $result.allowFiles[0].sha256Column | Should -Be 'SHA256'
+                @($result.allowFiles[0].deviceGroupNames) | Should -Be @('Servers')
             }
         }
     }

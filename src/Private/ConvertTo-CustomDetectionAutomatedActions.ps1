@@ -61,6 +61,12 @@ function ConvertTo-CustomDetectionAutomatedActions {
 
         $additional = ConvertTo-CustomDetectionHashtable -InputObject $map['additionalFields']
         if ($additional) {
+            foreach ($key in @($additional.Keys)) {
+                if ("$key".StartsWith('@')) { continue }
+                if ($key -notin $entry.Fields) {
+                    throw "Field '$key' is not documented for action '$actionType'. Documented fields are: $($entry.Fields -join ', ')"
+                }
+            }
             $hasSha1 = $additional.Contains('sha1Column') -and "$($additional['sha1Column'])" -ne ''
             $hasSha256 = $additional.Contains('sha256Column') -and "$($additional['sha256Column'])" -ne ''
             if ($hasSha1 -and $hasSha256) {
