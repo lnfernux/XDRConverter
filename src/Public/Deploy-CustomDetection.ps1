@@ -12,9 +12,10 @@ function Deploy-CustomDetection {
         Use -DescriptionTagPrefix to add a prefix (e.g. "[PREFIX:<UUID>]") or
         -NoDescriptionTag to suppress the tag entirely.
 
-        New rules are created with the guid as their rule id. The function detects
-        whether the rule already exists (by rule id or by scanning descriptions for
-        the UUID tag) and issues a PATCH (update) instead of a POST (create). Before
+        The API assigns the rule id on create, and the guid travels in the
+        description tag. The function finds an existing rule through that tag,
+        through a UUID rule id, or, with -NoDescriptionTag, through the display
+        name, and issues a PATCH (update) instead of a POST (create). Before
         updating it compares the local rule against the remote version and skips the
         call when nothing changed.
 
@@ -32,7 +33,8 @@ function Deploy-CustomDetection {
         Deploy the rule with status = disabled regardless of the file value.
 
     .PARAMETER NoDescriptionTag
-        When set, the "[<UUID>]" tag is NOT appended to the description.
+        When set, the "[<UUID>]" tag is NOT appended to the description. The
+        display name then becomes the only identity on redeploy.
 
     .PARAMETER DescriptionTagPrefix
         Prefix placed before the UUID inside the tag, e.g. 'PREFIX' produces "[PREFIX:<UUID>]".
@@ -275,8 +277,20 @@ function Deploy-CustomDetection {
                 if ($existingRuleId) {
                     Write-Verbose "Found matching detection by description tag: Rule Id '$existingRuleId'."
                 } else {
-                    Write-Verbose "No existing rule carries the tag '$detectorId'. The rule will be created."
+                    Write-Verbose "No existing rule carries the tag '$detectorId'."
                 }
+            }
+
+            # Without a tag the display name is the only identity left. The API keeps names unique
+            if (-not $existingRuleId -and $NoDescriptionTag) {
+                $byName = Get-CustomDetectionIds | Where-Object { $_.DisplayName -eq $jsonObj.displayName } | Select-Object -First 1
+                if ($byName) {
+                    $existingRuleId = $byName.Id
+                    Write-Verbose "Found matching detection by display name: Rule Id '$existingRuleId'."
+                }
+            }
+            if (-not $existingRuleId) {
+                Write-Verbose "The rule will be created."
             }
 
             # Fetch the full existing rule if we found one

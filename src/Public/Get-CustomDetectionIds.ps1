@@ -63,8 +63,8 @@ function Get-CustomDetectionIds {
         }
 
         try {
-            # Query the Microsoft Graph API with pagination support
-            $uri = "https://graph.microsoft.com/beta/security/rules/detectionRules?`$select=id,detectionAction"
+            # Query the Microsoft Graph API with pagination support. No projection, so detectorId is kept while the API still returns it
+            $uri = 'https://graph.microsoft.com/beta/security/rules/detectionRules'
             $allValues = [System.Collections.Generic.List[object]]::new()
 
             do {
@@ -97,6 +97,7 @@ function Get-CustomDetectionIds {
                     [PSCustomObject]@{
                         Id             = $_.id
                         DetectorId     = if ($_.detectorId) { $_.detectorId } else { $_.id }
+                        DisplayName    = $_.displayName
                         DescriptionTag = $descriptionTag
                         TagPrefix      = $tagPrefix
                     }

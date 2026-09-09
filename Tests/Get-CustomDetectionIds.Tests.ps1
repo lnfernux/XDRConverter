@@ -205,6 +205,7 @@ Describe 'Get-CustomDetectionIds' {
                     value = @(
                         @{
                             id              = 'rule-new'
+                            displayName     = 'Rule New'
                             detectionAction = @{ alertTemplate = @{ description = 'Alert [12345678-1234-1234-1234-123456789abc]' } }
                         }
                     )
@@ -216,10 +217,13 @@ Describe 'Get-CustomDetectionIds' {
             }
         }
 
-        It 'Should not select detectorId from the API' {
+        It 'Should not restrict the projection, so detectorId survives while the API returns it' {
             Get-CustomDetectionIds | Out-Null
-            $script:CapturedUri | Should -Not -Match 'detectorId'
-            $script:CapturedUri | Should -Match '\$select=id,detectionAction'
+            $script:CapturedUri | Should -Not -Match '\$select'
+        }
+
+        It 'Should carry the display name' {
+            (Get-CustomDetectionIds)[0].DisplayName | Should -Be 'Rule New'
         }
 
         It 'Should fall back to the rule id for DetectorId' {

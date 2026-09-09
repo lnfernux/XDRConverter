@@ -51,6 +51,7 @@ function ConvertFrom-CustomDetectionAutomatedActions {
     }
 
     foreach ($key in @($collections.Keys)) {
+        if ("$key".StartsWith('@')) { continue }
         $rawItems = $collections[$key]
         if ($null -eq $rawItems) { continue }
         if ($rawItems -is [string] -or $rawItems -isnot [System.Collections.IEnumerable] -or $rawItems -is [System.Collections.IDictionary]) {
@@ -70,6 +71,7 @@ function ConvertFrom-CustomDetectionAutomatedActions {
             $fields = [ordered]@{}
             if ($item) {
                 foreach ($columnKey in @($item.Keys)) {
+                    if ("$columnKey".StartsWith('@')) { continue }
                     $value = $item[$columnKey]
                     if ($null -eq $value -or "$value" -eq '') { continue }
                     if ($columnKey -eq 'isolationType') {

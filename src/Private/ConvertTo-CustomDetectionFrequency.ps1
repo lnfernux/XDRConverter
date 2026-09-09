@@ -35,7 +35,8 @@ function ConvertTo-CustomDetectionFrequency {
         return $legacyMap[$key]
     }
 
-    if ($key -match '^P(?=\d|T\d)(?:\d+W)?(?:\d+D)?(?:T(?:\d+H)?(?:\d+M)?(?:\d+S)?)?$') {
+    # Weeks stand alone. A T marker needs at least one time component after it
+    if ($key -match '^P(?:\d+W|(?=\d|T\d)(?:\d+D)?(?:T(?=\d)(?:\d+H)?(?:\d+M)?(?:\d+S)?)?)$') {
         return $key
     }
 

@@ -137,7 +137,7 @@ Creates or updates a Defender XDR custom detection rule from a YAML or JSON file
 | Severity | String | No | Override the alert severity (`Informational`, `Low`, `Medium`, `High`) |
 | TitlePrefix | String | No | String prepended to the rule's `displayName` and `alertTitle` |
 | Disabled | Switch | No | Deploy the rule with `status = disabled` regardless of the file value |
-| NoDescriptionTag | Switch | No | Do not append a `[<UUID>]` tag to the description |
+| NoDescriptionTag | Switch | No | Do not append a `[<UUID>]` tag to the description. The display name then becomes the only identity on redeploy |
 | DescriptionTagPrefix | String | No | Prefix inside the description tag, e.g. `PREFIX` produces `[PREFIX:<UUID>]` |
 | ParameterFile | String | No | Path to a YAML parameter file for query variable replacement (see below) |
 | Force | Switch | No | Skip change-detection and always push the rule to the API |
@@ -272,6 +272,7 @@ Lists detection rule IDs with their description tags and tag prefixes. Results a
 The output includes:
 - **Id**: The detection rule ID
 - **DetectorId**: Compatibility column. Carries the legacy detector ID while the API still returns it, otherwise the rule ID
+- **DisplayName**: The rule name
 - **DescriptionTag**: The UUID extracted from the description tag (e.g., from `[PREFIX:uuid]` or `[uuid]`)
 - **TagPrefix**: The prefix text from the description tag (e.g., `PREFIX` from `[PREFIX:uuid]`, or `$null` if no prefix)
 
@@ -377,7 +378,7 @@ The Graph API deprecated several `detectionRule` properties and removes them on 
 | description | No | `description` | Rule description shown in the portal rule list |
 | status | No | `status` | `enabled`, `disabled` or `autoDisabled`. Wins over `isEnabled` |
 | isEnabled | No | `status` | Legacy. `true` becomes `enabled`, `false` becomes `disabled`. Defaults to enabled |
-| frequency | Yes | `schedule.frequency` | ISO 8601 duration (`PT0S`, `PT1H`, `PT3H`, `PT12H`, `P1D`). Legacy tokens `0`, `1H`, `3H`, `12H`, `24H` are translated |
+| frequency | Yes | `schedule.frequency` | ISO 8601 duration (`PT0S`, `PT1H`, `PT3H`, `PT12H`, `P1D`). Other well-formed durations pass through unchanged. Legacy tokens `0`, `1H`, `3H`, `12H`, `24H` are translated |
 | alertTitle | Yes | `detectionAction.alertTemplate.title` | |
 | alertSeverity | Yes | `detectionAction.alertTemplate.severity` | |
 | alertDescription | Yes | `detectionAction.alertTemplate.description` | The description tag is appended on deploy |
@@ -394,7 +395,7 @@ The Graph API deprecated several `detectionRule` properties and removes them on 
 
 ### Legacy entity identifiers
 
-Each `impactedEntities` entry becomes one column in the matching `entityMappings` collection. The column value is the identifier name. Entries of the same type merge into one item until a column is already taken. An account item needs `aadUserIdColumn`, `sidColumn`, `upnColumn`, or `nameColumn` together with a domain column. An item that ends up with only a name or only a domain is dropped with a warning, which matches what the API did with the legacy property.
+Each `impactedEntities` entry becomes one column in the matching `entityMappings` collection. The column value is the identifier name. Entries of the same type merge into one item until a column is already taken. An account item needs `aadUserIdColumn`, `sidColumn`, `upnColumn`, or `nameColumn` together with a domain column. A legacy item that ends up with only a name or only a domain is dropped with a warning, which matches what the API did with the legacy property. An explicit `entityMappings.accounts` item with the same gap is an error, or a warning with `-SkipIdentifierValidation`.
 
 | entityType | entityIdentifier | Collection and column |
 | --- | --- | --- |
@@ -543,7 +544,11 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - The detection id cache is cleared after a create or delete
 - JSON input files are normalised before deployment, so legacy JSON exports deploy with the current body
 - `Test-CustomDetectionMitreTechnique` accepts a `tactics` list and validates each tactic
-- `ConvertTo-CustomDetectionYaml -LegacyKeys` emits the legacy YAML keys for files that must stay in the old form
+- `ConvertTo-CustomDetectionYaml -LegacyKeys` emits the legacy YAML keys for files that must stay in the old form. Column mappings the legacy identifiers cannot express are dropped with a warning
+- With `-NoDescriptionTag`, an existing rule is found through its display name, which the API keeps unique
+- `Get-CustomDetectionIds` carries the display name and no longer projects the list, so the legacy detector id stays available while the API returns it
+- A file action that names both hash columns is rejected before the request
+- OData annotations on entity mappings and automated actions are ignored
 - Request bodies are stripped of PowerShell object wrappers before they reach the Graph client, which rejected them with a self-referencing loop error
 - Updates name every action and entity mapping collection, so an action or entity removed from the file is removed from the rule
 - Bugs/issues or undocumented behavior identified while testing: 

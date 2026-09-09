@@ -47,6 +47,24 @@ Describe 'CustomDetection mapping helpers' {
             }
         }
 
+        It 'Rejects the malformed duration <Value>' -ForEach @(
+            @{ Value = 'P1DT' }
+            @{ Value = 'P1W1D' }
+            @{ Value = 'P' }
+        ) {
+            InModuleScope XDRConverter -Parameters @{ Value = $Value } {
+                { ConvertTo-CustomDetectionFrequency -Value $Value } | Should -Throw "*Unsupported frequency*"
+            }
+        }
+
+        It 'Keeps the schema frequency pattern aligned with the converter' {
+            $schema = Join-Path (Split-Path $PSScriptRoot -Parent) 'CustomDetection.schema.json'
+            foreach ($case in @(@{ Value = 'P1W'; Valid = $true }, @{ Value = 'PT30M'; Valid = $true }, @{ Value = 'P1DT'; Valid = $false }, @{ Value = 'P1W1D'; Valid = $false })) {
+                $json = @{ guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'; ruleName = 'r'; alertTitle = 't'; frequency = $case.Value; alertSeverity = 'Low'; alertDescription = 'd'; alertCategory = 'Execution'; queryText = 'q' } | ConvertTo-Json
+                (Test-Json -Json $json -SchemaFile $schema -ErrorAction SilentlyContinue) | Should -Be $case.Valid -Because $case.Value
+            }
+        }
+
         It 'Throws on an empty value' {
             InModuleScope XDRConverter {
                 { ConvertTo-CustomDetectionFrequency -Value $null } | Should -Throw '*frequency is required*'
@@ -429,6 +447,64 @@ Describe 'CustomDetection mapping helpers' {
         }
     }
 
+    Context 'ConvertTo-CustomDetectionEntityMappings input hygiene' {
+
+        It 'Ignores OData annotations on explicit mapping items' {
+            InModuleScope XDRConverter {
+                $result = ConvertTo-CustomDetectionEntityMappings -EntityMappings @{ hosts = @(@{ '@odata.type' = '#microsoft.graph.security.hostEntityMapping'; deviceIdColumn = 'DeviceId' }) }
+                @($result.hosts[0].Keys) | Should -Be @('deviceIdColumn')
+            }
+        }
+
+        It 'Rejects an explicit account mapping without a key column' {
+            InModuleScope XDRConverter {
+                { ConvertTo-CustomDetectionEntityMappings -EntityMappings @{ accounts = @(@{ nameColumn = 'AccountName' }) } } | Should -Throw '*aadUserIdColumn*'
+            }
+        }
+
+        It 'Drops an incomplete explicit account mapping with a warning when validation is skipped' {
+            InModuleScope XDRConverter {
+                $result = ConvertTo-CustomDetectionEntityMappings -EntityMappings @{ accounts = @(@{ nameColumn = 'AccountName' }); hosts = @(@{ deviceIdColumn = 'DeviceId' }) } -SkipIdentifierValidation -WarningVariable w -WarningAction SilentlyContinue
+                $result.Keys | Should -Not -Contain 'accounts'
+                "$w" | Should -Match 'AccountName'
+            }
+        }
+    }
+
+    Context 'ConvertTo-CustomDetectionLegacyYaml' {
+
+        It 'Drops a column the legacy identifiers cannot express and warns' {
+            InModuleScope XDRConverter {
+                $yaml = @{
+                    guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'; ruleName = 'R'; alertTitle = 'T'; alertSeverity = 'Low'; alertDescription = 'D'; frequency = 'PT1H'; queryText = 'Q'
+                    tactics = @(@{ tactic = 'Execution' })
+                    entityMappings = @{ hosts = @(@{ deviceIdColumn = 'HostId' }, @{ deviceIdColumn = 'DeviceId' }) }
+                }
+                $legacy = ConvertTo-CustomDetectionLegacyYaml -YamlObject $yaml -WarningVariable w -WarningAction SilentlyContinue
+                @($legacy.impactedEntities).Count | Should -Be 1
+                $legacy.impactedEntities[0].entityIdentifier | Should -Be 'deviceId'
+                "$w" | Should -Match 'HostId'
+            }
+        }
+
+        It 'Warns when an action column mapping is lost' {
+            InModuleScope XDRConverter {
+                $yaml = @{
+                    guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'; ruleName = 'R'; alertTitle = 'T'; alertSeverity = 'Low'; alertDescription = 'D'; frequency = 'PT1H'; queryText = 'Q'
+                    tactics = @(@{ tactic = 'Execution' })
+                    actions = @(
+                        @{ actionType = 'IsolateMachine'; additionalFields = @{ deviceIdColumn = 'TargetDeviceId'; isolationType = 'Selective' } }
+                        @{ actionType = 'RunAntivirusScan'; additionalFields = @{ deviceIdColumn = 'DeviceId' } }
+                    )
+                }
+                $legacy = ConvertTo-CustomDetectionLegacyYaml -YamlObject $yaml -WarningVariable w -WarningAction SilentlyContinue
+                @($legacy.actions).Count | Should -Be 2
+                $w.Count | Should -Be 1
+                "$w" | Should -Match 'TargetDeviceId'
+            }
+        }
+    }
+
     Context 'ConvertFrom-CustomDetectionEntityMappings' {
 
         It 'Strips null collections and empty columns from a Graph response' {
@@ -617,6 +693,31 @@ Describe 'CustomDetection mapping helpers' {
                 @($patch.detectionAction.organizationalScope.deviceGroups) | Should -Be @('Servers')
                 $patch.detectionAction.alertTemplate.customDetails.A | Should -Be 'B'
                 $body.detectionAction.Keys | Should -Not -Contain 'automatedActions'
+            }
+        }
+    }
+
+    Context 'ConvertTo-CustomDetectionAutomatedActions hash columns' {
+
+        It 'Rejects a file action that names both hash columns' {
+            InModuleScope XDRConverter {
+                { ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = 'BlockFile'; additionalFields = @{ sha1Column = 'SHA1'; sha256Column = 'SHA256' } }) } | Should -Throw '*one hash column*'
+            }
+        }
+    }
+
+    Context 'ConvertFrom-CustomDetectionAutomatedActions OData annotations' {
+
+        It 'Ignores OData annotations on the collection and its items' {
+            InModuleScope XDRConverter {
+                $graph = [PSCustomObject]@{
+                    '@odata.type'  = '#microsoft.graph.security.automatedActions'
+                    isolateDevices = @([PSCustomObject]@{ '@odata.type' = '#microsoft.graph.security.isolateDeviceAction'; deviceIdColumn = 'DeviceId'; isolationType = 'full' })
+                }
+                $result = @(ConvertFrom-CustomDetectionAutomatedActions -AutomatedActions $graph -WarningVariable w -WarningAction SilentlyContinue)
+                $result.Count | Should -Be 1
+                $result[0].additionalFields.Keys | Should -Not -Contain '@odata.type'
+                $w.Count | Should -Be 0
             }
         }
     }

@@ -451,6 +451,43 @@ queryText: DeviceEvents
             }
         }
 
+        It 'Should find an untagged rule by display name when -NoDescriptionTag is set' {
+            InModuleScope XDRConverter {
+                $script:DetectionIdsCache = @{
+                    Data      = @([PSCustomObject]@{ Id = '77'; DetectorId = '77'; DisplayName = 'BODY-NoTag'; DescriptionTag = $null; TagPrefix = $null })
+                    ExpiresAt = [datetime]::UtcNow.AddHours(1)
+                }
+            }
+            Mock Get-CustomDetection {
+                return @{
+                    id              = '77'
+                    displayName     = 'BODY-NoTag'
+                    status          = 'enabled'
+                    detectionAction = @{ alertTemplate = @{ title = 'Old'; description = 'Old'; severity = 'low'; tactics = @(@{ tactic = 'DefenseEvasion' }) } }
+                    queryCondition  = @{ queryText = 'DeviceEvents' }
+                    schedule        = @{ frequency = 'PT1H' }
+                }
+            } -ModuleName XDRConverter
+
+            $testYaml = @"
+guid: 4d3a1c81-d784-4ef2-9e17-18d2d8e455f6
+ruleName: BODY-NoTag
+alertTitle: Test
+frequency: 1H
+alertSeverity: Medium
+alertDescription: Test
+alertCategory: DefenseEvasion
+queryText: DeviceEvents
+"@
+            $tempFile = Join-Path TestDrive: 'body-notag.yaml'
+            $testYaml | Out-File -FilePath $tempFile -Encoding UTF8
+
+            $result = Deploy-CustomDetection -InputFile $tempFile -NoDescriptionTag -Confirm:$false
+            $result.Action | Should -Be 'Updated'
+            $result.RuleId | Should -Be '77'
+            $script:CapturedMethod | Should -Be 'PATCH'
+        }
+
         It 'Should PATCH without the id property' {
             $guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'
             Mock Get-CustomDetectionIdByDetectorId { return '48' } -ModuleName XDRConverter

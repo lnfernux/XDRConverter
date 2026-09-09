@@ -76,6 +76,7 @@ function ConvertTo-CustomDetectionLegacyYaml {
     }
 
     $entityTypes = @{ hosts = 'Machine'; accounts = 'User'; mailboxes = 'Mailbox' }
+    $legacyIdentifiers = Get-CustomDetectionLegacyIdentifierMap
     $impactedEntities = [System.Collections.Generic.List[object]]::new()
     $entityMappings = ConvertTo-CustomDetectionHashtable -InputObject $yaml['entityMappings']
     if ($entityMappings) {
@@ -90,9 +91,15 @@ function ConvertTo-CustomDetectionLegacyYaml {
                 foreach ($column in $columns.Keys) {
                     $value = "$($columns[$column])"
                     if (-not $value) { continue }
+                    $identifier = $value.Substring(0, 1).ToLowerInvariant() + $value.Substring(1)
+                    $known = @($legacyIdentifiers[$collection][$column]) | Where-Object { $_ -eq $identifier } | Select-Object -First 1
+                    if (-not $known) {
+                        Write-Warning "Entity mapping $collection.$column = '$value' has no legacy identifier and is dropped."
+                        continue
+                    }
                     $impactedEntities.Add([ordered]@{
                             entityType       = $entityTypes[$collection]
-                            entityIdentifier = $value.Substring(0, 1).ToLowerInvariant() + $value.Substring(1)
+                            entityIdentifier = $known
                         })
                 }
             }
@@ -103,6 +110,7 @@ function ConvertTo-CustomDetectionLegacyYaml {
     }
 
     $legacyActionTypes = @('IsolateMachine', 'CollectInvestigationPackage', 'RunAntivirusScan', 'InitiateInvestigation', 'RestrictAppExecution')
+    $actionMap = Get-CustomDetectionActionMap
     $actions = [System.Collections.Generic.List[object]]::new()
     foreach ($item in @($yaml['actions'])) {
         $map = ConvertTo-CustomDetectionHashtable -InputObject $item
@@ -117,6 +125,15 @@ function ConvertTo-CustomDetectionLegacyYaml {
         $fields = ConvertTo-CustomDetectionHashtable -InputObject $map['additionalFields']
         if ($known -eq 'IsolateMachine' -and $fields -and $fields['isolationType']) {
             $action['additionalFields'] = [ordered]@{ isolationType = (Get-Culture).TextInfo.ToTitleCase("$($fields['isolationType'])".ToLowerInvariant()) }
+        }
+        # The legacy keys carry no column mappings, so anything beyond the defaults is lost
+        if ($fields) {
+            $defaults = ($actionMap | Where-Object { $_.ActionType -eq $known } | Select-Object -First 1).Defaults
+            foreach ($field in @($fields.Keys)) {
+                if ($field -eq 'isolationType') { continue }
+                if ($defaults.Contains($field) -and "$($defaults[$field])" -eq "$($fields[$field])") { continue }
+                Write-Warning "Action '$known' column mapping $field = '$($fields[$field])' has no legacy form and is dropped. The rule redeploys with the default."
+            }
         }
         $actions.Add($action)
     }

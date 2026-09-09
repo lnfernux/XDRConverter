@@ -61,8 +61,13 @@ function ConvertTo-CustomDetectionAutomatedActions {
 
         $additional = ConvertTo-CustomDetectionHashtable -InputObject $map['additionalFields']
         if ($additional) {
+            $hasSha1 = $additional.Contains('sha1Column') -and "$($additional['sha1Column'])" -ne ''
+            $hasSha256 = $additional.Contains('sha256Column') -and "$($additional['sha256Column'])" -ne ''
+            if ($hasSha1 -and $hasSha256) {
+                throw "Action '$actionType' names sha1Column and sha256Column. A file action carries one hash column."
+            }
             # A file action carries one hash column, so an explicit sha256Column replaces the sha1Column default
-            if ($additional.Contains('sha256Column') -and -not $additional.Contains('sha1Column') -and $item.Contains('sha1Column')) {
+            if ($hasSha256 -and -not $hasSha1 -and $item.Contains('sha1Column')) {
                 $item.Remove('sha1Column')
             }
             foreach ($key in @($additional.Keys)) {

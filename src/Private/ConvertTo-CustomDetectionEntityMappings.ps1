@@ -34,22 +34,7 @@ function ConvertTo-CustomDetectionEntityMappings {
         mailbox = @{ Collection = 'mailboxes'; DefaultColumn = 'primaryAddressColumn' }
     }
 
-    $legacyIdentifiers = @{
-        hosts     = @{
-            deviceIdColumn = @('deviceId')
-            nameColumn     = @('deviceName', 'remoteDeviceName', 'targetDeviceName', 'destinationDeviceName')
-        }
-        accounts  = @{
-            aadUserIdColumn = @('accountObjectId', 'recipientObjectId', 'processAccountObjectId', 'initiatingProcessAccountObjectId', 'servicePrincipalId')
-            sidColumn       = @('accountSid', 'requestAccountSid', 'initiatingAccountSid', 'initiatingProcessAccountSid')
-            upnColumn       = @('accountUpn', 'initiatingProcessAccountUpn', 'targetAccountUpn')
-            nameColumn      = @('accountName', 'requestAccountName', 'initiatingAccountName', 'servicePrincipalName', 'accountId')
-            ntDomainColumn  = @('accountDomain', 'requestAccountDomain', 'initiatingAccountDomain')
-        }
-        mailboxes = @{
-            primaryAddressColumn = @('accountUpn', 'fileOwnerUpn', 'initiatingProcessAccountUpn', 'lastModifyingAccountUpn', 'targetAccountUpn', 'senderFromAddress', 'senderDisplayName', 'recipientEmailAddress', 'senderMailFromAddress')
-        }
-    }
+    $legacyIdentifiers = Get-CustomDetectionLegacyIdentifierMap
 
     function Add-MappingColumn {
         param([System.Collections.Specialized.OrderedDictionary]$Result, [string]$Collection, [string]$Column, [string]$Value)
@@ -110,26 +95,6 @@ function ConvertTo-CustomDetectionEntityMappings {
             $columnValue = $canonical.Substring(0, 1).ToUpperInvariant() + $canonical.Substring(1)
             Add-MappingColumn -Result $result -Collection $collection -Column $column -Value $columnValue
         }
-
-        # The API rejects an account mapping that has no key column and no name plus domain pair
-        if ($result.Contains('accounts')) {
-            $complete = [System.Collections.Generic.List[object]]::new()
-            foreach ($item in $result['accounts']) {
-                $hasKeyColumn = $item.Contains('aadUserIdColumn') -or $item.Contains('sidColumn') -or $item.Contains('upnColumn')
-                $hasNameAndDomain = $item.Contains('nameColumn') -and ($item.Contains('ntDomainColumn') -or $item.Contains('dnsDomainColumn') -or $item.Contains('upnSuffixColumn'))
-                if ($hasKeyColumn -or $hasNameAndDomain) {
-                    $complete.Add($item)
-                    continue
-                }
-                $columns = ($item.Keys | ForEach-Object { "$_ = $($item[$_])" }) -join ', '
-                Write-Warning "Account mapping ($columns) is dropped. The API needs aadUserIdColumn, sidColumn, upnColumn, or nameColumn together with a domain column."
-            }
-            if ($complete.Count -eq 0) {
-                $result.Remove('accounts')
-            } else {
-                $result['accounts'] = $complete
-            }
-        }
     } else {
         $mappings = ConvertTo-CustomDetectionHashtable -InputObject $EntityMappings
         foreach ($key in @($mappings.Keys)) {
@@ -155,6 +120,7 @@ function ConvertTo-CustomDetectionEntityMappings {
                 if (-not $item) { continue }
                 $cleanItem = [ordered]@{}
                 foreach ($columnKey in @($item.Keys)) {
+                    if ("$columnKey".StartsWith('@')) { continue }
                     $value = $item[$columnKey]
                     if ($null -eq $value -or "$value" -eq '') { continue }
                     if ($collectionColumns.Contains($collection) -and $columnKey -notin $collectionColumns[$collection]) {
@@ -173,6 +139,33 @@ function ConvertTo-CustomDetectionEntityMappings {
                 }
                 $result[$collection].Add($cleanItem)
             }
+        }
+    }
+
+    # The API rejects an account mapping that has no key column and no name plus domain pair.
+    # Legacy input is dropped with a warning, which is what the API did with impactedAssets.
+    # Explicit input is an error unless validation is skipped.
+    if ($result.Contains('accounts')) {
+        $dropIncomplete = ($PSCmdlet.ParameterSetName -eq 'ImpactedEntities') -or $SkipIdentifierValidation
+        $complete = [System.Collections.Generic.List[object]]::new()
+        foreach ($item in $result['accounts']) {
+            $hasKeyColumn = $item.Contains('aadUserIdColumn') -or $item.Contains('sidColumn') -or $item.Contains('upnColumn')
+            $hasNameAndDomain = $item.Contains('nameColumn') -and ($item.Contains('ntDomainColumn') -or $item.Contains('dnsDomainColumn') -or $item.Contains('upnSuffixColumn'))
+            if ($hasKeyColumn -or $hasNameAndDomain) {
+                $complete.Add($item)
+                continue
+            }
+            $columns = ($item.Keys | ForEach-Object { "$_ = $($item[$_])" }) -join ', '
+            $message = "Account mapping ($columns) needs aadUserIdColumn, sidColumn, upnColumn, or nameColumn together with a domain column."
+            if (-not $dropIncomplete) {
+                throw $message
+            }
+            Write-Warning "$message It is dropped."
+        }
+        if ($complete.Count -eq 0) {
+            $result.Remove('accounts')
+        } else {
+            $result['accounts'] = $complete
         }
     }
 
