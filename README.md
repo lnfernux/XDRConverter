@@ -127,7 +127,7 @@ Get-CustomDetection | ConvertTo-CustomDetectionYaml -UseIdAsFilename
 
 ### Deploy-CustomDetection
 
-Creates or updates a Defender XDR custom detection rule from a YAML or JSON file via the Microsoft Graph API. New rules get the rule id `rule-<guid>`, because the API wants a client id that starts with a letter, and the YAML `guid` also travels in the description tag. The cmdlet detects whether the rule already exists (by rule id, by description tag, or by display name with `-NoDescriptionTag`) and issues a PATCH (update) or POST (create) accordingly. Before updating, it compares the local rule against the remote version and skips the call when nothing changed. The comparison covers every managed property, including tactics, entity mappings, automated actions and device groups.
+Creates or updates a Defender XDR custom detection rule from a YAML or JSON file via the Microsoft Graph API. New rules are sent with the rule id `rule-<guid>`, and the YAML `guid` also travels in the description tag. The id is not required. The Graph reference marks it as required, but live testing showed the API assigns an id when none is sent, and rejects one that starts with a digit. This is retested after the 2026-10-01 removal date. The cmdlet detects whether the rule already exists (by rule id, by description tag, or by display name with `-NoDescriptionTag`) and issues a PATCH (update) or POST (create) accordingly. Before updating, it compares the local rule against the remote version and skips the call when nothing changed. The comparison covers every managed property, including tactics, entity mappings, automated actions and device groups.
 
 #### Parameters
 
@@ -373,7 +373,7 @@ The Graph API deprecated several `detectionRule` properties and removes them on 
 
 | YAML key | Required | Graph property | Notes |
 | --- | --- | --- | --- |
-| guid | Yes | `id` | Kept as `id` in the converted JSON and used as the description tag. Sent on create as `rule-<guid>`, because the API wants a client id that starts with a letter. `id` is accepted as an alias |
+| guid | Yes | `id` | Kept as `id` in the converted JSON and used as the description tag. Sent on create as `rule-<guid>`. Not required by the API in live testing, whatever the reference says. `id` is accepted as an alias |
 | ruleName | Yes | `displayName` | |
 | description | No | `description` | Rule description shown in the portal rule list |
 | status | No | `status` | `enabled`, `disabled` or `autoDisabled`. Wins over `isEnabled` |
@@ -565,7 +565,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
    - The API accepts one tactic per rule
    - File actions keep one hash column
    - Custom details cannot be cleared once set
-   - A client-supplied rule id must start with a letter, so a guid needs a prefix
+   - The reference marks the rule id as required on create. Live testing showed the API assigns one when it is absent, and rejects a client id that starts with a digit, so a guid needs a prefix
    - An account entity mapping needs a key column or a name plus domain pair. A name-only mapping is rejected on write, while the legacy property was silently emptied
 
 ### 1.4.1
