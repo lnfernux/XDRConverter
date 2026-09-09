@@ -419,7 +419,7 @@ Describe 'ConvertTo-CustomDetectionYaml' {
       $w.Count | Should -BeGreaterOrEqual 4
       $yaml.frequency | Should -Be 'PT30M'
       $yaml.alertCategory | Should -Be 'Execution'
-      $yaml.Keys | Should -Not -Contain 'impactedEntities'
+      ($yaml.impactedEntities | Where-Object { $_.entityType -eq 'FileHash' }).entityIdentifier | Should -Be 'sHA256'
       $yaml.Keys | Should -Not -Contain 'customDetails'
       $yaml.Keys | Should -Not -Contain 'description'
       $yaml.Keys | Should -Not -Contain 'actions'

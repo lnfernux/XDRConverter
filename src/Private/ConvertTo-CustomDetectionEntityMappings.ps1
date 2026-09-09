@@ -34,6 +34,16 @@ function ConvertTo-CustomDetectionEntityMappings {
         mailbox = @{ Collection = 'mailboxes'; DefaultColumn = 'primaryAddressColumn' }
     }
 
+    # Legacy types with one fixed column. The identifier is the query column name
+    $columnTypes = @{
+        ip            = @{ Collection = 'ips'; Column = 'addressColumn' }
+        url           = @{ Collection = 'urls'; Column = 'addressColumn' }
+        filehash      = @{ Collection = 'files'; Column = 'hash' }
+        process       = @{ Collection = 'processes'; Column = 'hash' }
+        registrykey   = @{ Collection = 'registryValues'; Column = 'keyColumn' }
+        registryvalue = @{ Collection = 'registryValues'; Column = 'valueNameColumn' }
+    }
+
     $legacyIdentifiers = Get-CustomDetectionLegacyIdentifierMap
 
     function Add-MappingColumn {
@@ -60,6 +70,23 @@ function ConvertTo-CustomDetectionEntityMappings {
             $identifier = "$($map['entityIdentifier'])".Trim()
             if (-not $entityType -or -not $identifier) {
                 throw 'Each impactedEntities entry needs entityType and entityIdentifier.'
+            }
+
+            $columnType = $columnTypes[$entityType.ToLowerInvariant()]
+            if ($columnType) {
+                $column = $columnType.Column
+                if ($column -eq 'hash') {
+                    if ($identifier -match 'sha256') {
+                        $column = 'sha256Column'
+                    } elseif ($identifier -match 'sha1') {
+                        $column = 'sha1Column'
+                    } else {
+                        throw "Identifier '$identifier' for entity type '$entityType' must name a SHA1 or SHA256 column."
+                    }
+                }
+                $columnValue = $identifier.Substring(0, 1).ToUpperInvariant() + $identifier.Substring(1)
+                Add-MappingColumn -Result $result -Collection $columnType.Collection -Column $column -Value $columnValue
+                continue
             }
 
             $typeInfo = $legacyTypes[$entityType.ToLowerInvariant()]

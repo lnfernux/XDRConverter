@@ -76,11 +76,38 @@ function ConvertTo-CustomDetectionLegacyYaml {
     }
 
     $entityTypes = @{ hosts = 'Machine'; accounts = 'User'; mailboxes = 'Mailbox' }
+    $columnTypes = @{
+        ips            = @{ addressColumn = 'IP' }
+        urls           = @{ addressColumn = 'URL' }
+        files          = @{ sha1Column = 'FileHash'; sha256Column = 'FileHash' }
+        processes      = @{ sha1Column = 'Process'; sha256Column = 'Process' }
+        registryValues = @{ keyColumn = 'RegistryKey'; valueNameColumn = 'RegistryValue' }
+    }
     $legacyIdentifiers = Get-CustomDetectionLegacyIdentifierMap
     $impactedEntities = [System.Collections.Generic.List[object]]::new()
     $entityMappings = ConvertTo-CustomDetectionHashtable -InputObject $yaml['entityMappings']
     if ($entityMappings) {
         foreach ($collection in $entityMappings.Keys) {
+            if ($columnTypes.ContainsKey($collection)) {
+                foreach ($item in @($entityMappings[$collection])) {
+                    $columns = ConvertTo-CustomDetectionHashtable -InputObject $item
+                    if (-not $columns) { continue }
+                    foreach ($column in $columns.Keys) {
+                        $value = "$($columns[$column])"
+                        if (-not $value) { continue }
+                        $legacyType = $columnTypes[$collection][$column]
+                        if (-not $legacyType) {
+                            Write-Warning "Entity mapping $collection.$column = '$value' has no legacy entity type and is dropped."
+                            continue
+                        }
+                        $impactedEntities.Add([ordered]@{
+                                entityType       = $legacyType
+                                entityIdentifier = $value.Substring(0, 1).ToLowerInvariant() + $value.Substring(1)
+                            })
+                    }
+                }
+                continue
+            }
             if (-not $entityTypes.ContainsKey($collection)) {
                 Write-Warning "Entity mapping '$collection' has no legacy entity type and is dropped."
                 continue

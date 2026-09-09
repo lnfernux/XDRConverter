@@ -207,7 +207,13 @@
                             "Device",
                             "User",
                             "Account",
-                            "Mailbox"
+                            "Mailbox",
+                            "IP",
+                            "URL",
+                            "FileHash",
+                            "Process",
+                            "RegistryKey",
+                            "RegistryValue"
                         ]
                     },
                     "entityIdentifier": {

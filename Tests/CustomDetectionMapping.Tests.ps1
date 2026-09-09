@@ -57,6 +57,12 @@ Describe 'CustomDetection mapping helpers' {
             }
         }
 
+        It 'Keeps the legacy entity types in the schema' {
+            $schema = Join-Path (Split-Path $PSScriptRoot -Parent) 'CustomDetection.schema.json'
+            $json = @{ guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'; ruleName = 'r'; alertTitle = 't'; frequency = 'PT1H'; alertSeverity = 'Low'; alertDescription = 'd'; alertCategory = 'Execution'; queryText = 'q'; impactedEntities = @(@{ entityType = 'IP'; entityIdentifier = 'RemoteIP' }) } | ConvertTo-Json -Depth 5
+            Test-Json -Json $json -SchemaFile $schema | Should -BeTrue
+        }
+
         It 'Keeps the schema frequency pattern aligned with the converter' {
             $schema = Join-Path (Split-Path $PSScriptRoot -Parent) 'CustomDetection.schema.json'
             foreach ($case in @(@{ Value = 'P1W'; Valid = $true }, @{ Value = 'PT30M'; Valid = $true }, @{ Value = 'P1DT'; Valid = $false }, @{ Value = 'P1W1D'; Valid = $false })) {
@@ -371,9 +377,30 @@ Describe 'CustomDetection mapping helpers' {
             }
         }
 
-        It 'Throws for entity types that need entityMappings' {
+        It 'Throws for an unknown entity type' {
             InModuleScope XDRConverter {
-                { ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @(@{ entityType = 'IP'; entityIdentifier = 'RemoteIP' }) } | Should -Throw '*Use entityMappings*'
+                { ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @(@{ entityType = 'Bogus'; entityIdentifier = 'RemoteIP' }) } | Should -Throw '*Use entityMappings*'
+            }
+        }
+
+        It 'Maps legacy type <Type> with <Identifier> to <Collection>.<Column>' -ForEach @(
+            @{ Type = 'IP'; Identifier = 'RemoteIP'; Collection = 'ips'; Column = 'addressColumn' }
+            @{ Type = 'URL'; Identifier = 'RemoteUrl'; Collection = 'urls'; Column = 'addressColumn' }
+            @{ Type = 'FileHash'; Identifier = 'SHA256'; Collection = 'files'; Column = 'sha256Column' }
+            @{ Type = 'FileHash'; Identifier = 'InitiatingProcessSHA1'; Collection = 'files'; Column = 'sha1Column' }
+            @{ Type = 'Process'; Identifier = 'SHA1'; Collection = 'processes'; Column = 'sha1Column' }
+            @{ Type = 'RegistryKey'; Identifier = 'RegistryKey'; Collection = 'registryValues'; Column = 'keyColumn' }
+            @{ Type = 'RegistryValue'; Identifier = 'RegistryValueName'; Collection = 'registryValues'; Column = 'valueNameColumn' }
+        ) {
+            InModuleScope XDRConverter -Parameters @{ Type = $Type; Identifier = $Identifier; Collection = $Collection; Column = $Column } {
+                $result = ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @(@{ entityType = $Type; entityIdentifier = $Identifier })
+                $result[$Collection][0][$Column] | Should -Be $Identifier
+            }
+        }
+
+        It 'Rejects a hash identifier that names neither SHA1 nor SHA256' {
+            InModuleScope XDRConverter {
+                { ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @(@{ entityType = 'FileHash'; entityIdentifier = 'MD5' }) } | Should -Throw '*SHA1*'
             }
         }
     }
@@ -484,6 +511,32 @@ Describe 'CustomDetection mapping helpers' {
                 @($legacy.impactedEntities).Count | Should -Be 1
                 $legacy.impactedEntities[0].entityIdentifier | Should -Be 'deviceId'
                 "$w" | Should -Match 'HostId'
+            }
+        }
+
+        It 'Emits the legacy entity types for ip, url, file, process and registry mappings' {
+            InModuleScope XDRConverter {
+                $yaml = @{
+                    guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'; ruleName = 'R'; alertTitle = 'T'; alertSeverity = 'Low'; alertDescription = 'D'; frequency = 'PT1H'; queryText = 'Q'
+                    tactics = @(@{ tactic = 'Execution' })
+                    entityMappings = @{
+                        ips            = @(@{ addressColumn = 'RemoteIP' })
+                        urls           = @(@{ addressColumn = 'RemoteUrl' })
+                        files          = @(@{ sha256Column = 'SHA256'; nameColumn = 'FileName' })
+                        processes      = @(@{ sha1Column = 'InitiatingProcessSHA1' })
+                        registryValues = @(@{ keyColumn = 'RegistryKey'; valueNameColumn = 'RegistryValueName' })
+                    }
+                }
+                $legacy = ConvertTo-CustomDetectionLegacyYaml -YamlObject $yaml -WarningVariable w -WarningAction SilentlyContinue
+                $pairs = @($legacy.impactedEntities | ForEach-Object { "$($_.entityType)=$($_.entityIdentifier)" })
+                $pairs | Should -Contain 'IP=remoteIP'
+                $pairs | Should -Contain 'URL=remoteUrl'
+                $pairs | Should -Contain 'FileHash=sHA256'
+                $pairs | Should -Contain 'Process=initiatingProcessSHA1'
+                $pairs | Should -Contain 'RegistryKey=registryKey'
+                $pairs | Should -Contain 'RegistryValue=registryValueName'
+                $pairs.Count | Should -Be 6
+                "$w" | Should -Match 'FileName'
             }
         }
 

@@ -407,6 +407,12 @@ Each `impactedEntities` entry becomes one column in the matching `entityMappings
 | User / Account | accountName, requestAccountName, initiatingAccountName, servicePrincipalName, accountId | `accounts.nameColumn` |
 | User / Account | accountDomain, requestAccountDomain, initiatingAccountDomain | `accounts.ntDomainColumn` |
 | Mailbox | any documented mailbox identifier | `mailboxes.primaryAddressColumn` |
+| IP | any query column | `ips.addressColumn` |
+| URL | any query column | `urls.addressColumn` |
+| FileHash | a column whose name contains SHA1 or SHA256 | `files.sha1Column` or `files.sha256Column` |
+| Process | a column whose name contains SHA1 or SHA256 | `processes.sha1Column` or `processes.sha256Column` |
+| RegistryKey | any query column | `registryValues.keyColumn` |
+| RegistryValue | any query column | `registryValues.valueNameColumn` |
 
 ### Actions
 
@@ -545,6 +551,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - JSON input files are normalised before deployment, so legacy JSON exports deploy with the current body
 - `Test-CustomDetectionMitreTechnique` accepts a `tactics` list and validates each tactic
 - `ConvertTo-CustomDetectionYaml -LegacyKeys` emits the legacy YAML keys for files that must stay in the old form. Column mappings the legacy identifiers cannot express are dropped with a warning
+- The legacy entity types IP, URL, FileHash, Process, RegistryKey and RegistryValue now deploy. Version 1.4.1 turned them into impactedAsset types the API does not have
 - With `-NoDescriptionTag`, an existing rule is found through its display name, which the API keeps unique
 - `Get-CustomDetectionIds` carries the display name and no longer projects the list, so the legacy detector id stays available while the API returns it
 - A file action that names both hash columns is rejected before the request
