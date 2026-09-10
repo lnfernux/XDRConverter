@@ -57,11 +57,11 @@ Converts a YAML Defender XDR detection file to JSON format. Supports file input,
 | InputObject | PSObject | Yes* | JSON detection rule object; accepts pipeline input (*Object parameter sets) |
 | OutputFile | String | No | Path to the output JSON file. If not specified, outputs to stdout |
 | UseDisplayNameAsFilename | Switch | No | Use the rule's display name as the output filename (.json) |
-| UseIdAsFilename | Switch | No | Use the rule's guid as the output filename (.json). Taken from the description tag, then a UUID rule id, then the legacy detectorId |
+| UseIdAsFilename | Switch | No | Use the rule's guid as the output filename (.json). Taken from the description tag, then a UUID rule id, then the guid after the `rule-` prefix, then the legacy detectorId |
 | OutputFolder | String | No | Folder for output when using `-UseDisplayNameAsFilename` or `-UseIdAsFilename` (defaults to temp directory) |
 | Enabled | Boolean | No | Set the rule status to enabled (`$true`) or disabled (`$false`) |
 | Severity | String | No | Override the alert severity (`Informational`, `Low`, `Medium`, `High`) |
-| SkipIdentifierValidation | Switch | No | Allow impacted entity identifiers not listed in the official documentation (emits a warning instead of throwing) |
+| SkipIdentifierValidation | Switch | No | Allow entity identifiers and mapping columns not listed in the official documentation (emits a warning instead of throwing) |
 
 #### Examples
 
@@ -78,7 +78,7 @@ ConvertTo-CustomDetectionJson -InputFile .\input.yaml -Enabled $false
 # Pipeline: export all rules from Defender XDR to JSON files named by display name
 Get-CustomDetection | ConvertTo-CustomDetectionJson -UseDisplayNameAsFilename -OutputFolder 'C:\Detections'
 
-# Pipeline: export all rules to JSON files named by detectorId
+# Pipeline: export all rules to JSON files named by guid
 Get-CustomDetection | ConvertTo-CustomDetectionJson -UseIdAsFilename
 
 # Parse the JSON output further
@@ -99,7 +99,7 @@ Converts a JSON Defender XDR detection file to YAML format. Properties not defin
 | InputObject | PSObject | Yes* | JSON detection rule object; accepts pipeline input (*Object parameter sets) |
 | OutputFile | String | No | Path to the output YAML file. If not specified, outputs to stdout |
 | UseDisplayNameAsFilename | Switch | No | Use the rule's display name as the output filename (.yaml) |
-| UseIdAsFilename | Switch | No | Use the rule's guid as the output filename (.yaml). Taken from the description tag, then a UUID rule id, then the legacy detectorId |
+| UseIdAsFilename | Switch | No | Use the rule's guid as the output filename (.yaml). Taken from the description tag, then a UUID rule id, then the guid after the `rule-` prefix, then the legacy detectorId |
 | OutputFolder | String | No | Folder for output when using `-UseDisplayNameAsFilename` or `-UseIdAsFilename` (defaults to temp directory) |
 | Enabled | Boolean | No | Set the rule status to enabled (`$true`) or disabled (`$false`) |
 | Severity | String | No | Override the alert severity (`Informational`, `Low`, `Medium`, `High`) |
@@ -127,7 +127,7 @@ Get-CustomDetection | ConvertTo-CustomDetectionYaml -UseIdAsFilename
 
 ### Deploy-CustomDetection
 
-Creates or updates a Defender XDR custom detection rule from a YAML or JSON file via the Microsoft Graph API. New rules are sent with the rule id `rule-<guid>`, and the YAML `guid` also travels in the description tag. The id is not required. The Graph reference marks it as required, but live testing showed the API assigns an id when none is sent, and rejects one that starts with a digit. This is retested after the 2026-10-01 removal date. The cmdlet detects whether the rule already exists (by rule id, by description tag, or by display name with `-NoDescriptionTag`, and by a direct request for `rule-<guid>` when the rule list carries none of them) and issues a PATCH (update) or POST (create) accordingly. Before updating, it compares the local rule against the remote version and skips the call when nothing changed. The comparison covers every managed property, including tactics, entity mappings, automated actions and device groups.
+Creates or updates a Defender XDR custom detection rule from a YAML or JSON file via the Microsoft Graph API. New rules are sent with the rule id `rule-<guid>`, and the YAML `guid` also travels in the description tag. The cmdlet requires a guid in the file. The API itself does not. The Graph reference marks the id as required, but live testing showed the API assigns one when none is sent and rejects one that starts with a digit. The cmdlet detects whether the rule already exists (by rule id, by description tag, or by display name with `-NoDescriptionTag`, and by a direct request for `rule-<guid>` when the rule list carries none of them) and issues a PATCH (update) or POST (create) accordingly. Before updating, it compares the local rule against the remote version and skips the call when nothing changed. The comparison covers every managed property, including tactics, entity mappings, automated actions and device groups.
 
 #### Parameters
 
@@ -137,7 +137,7 @@ Creates or updates a Defender XDR custom detection rule from a YAML or JSON file
 | Severity | String | No | Override the alert severity (`Informational`, `Low`, `Medium`, `High`) |
 | TitlePrefix | String | No | String prepended to the rule's `displayName` and `alertTitle` |
 | Disabled | Switch | No | Deploy the rule with `status = disabled` regardless of the file value |
-| NoDescriptionTag | Switch | No | Do not append a `[<UUID>]` tag to the description. The display name then becomes the only identity on redeploy |
+| NoDescriptionTag | Switch | No | Do not append a `[<UUID>]` tag to the description. Without the tag, a rule that does not carry the `rule-<guid>` id is matched by display name alone |
 | DescriptionTagPrefix | String | No | Prefix inside the description tag, e.g. `PREFIX` produces `[PREFIX:<UUID>]` |
 | ParameterFile | String | No | Path to a YAML parameter file for query variable replacement (see below) |
 | Force | Switch | No | Skip change-detection and always push the rule to the API |
@@ -356,7 +356,7 @@ Deletes a custom detection rule from Microsoft Defender XDR. The rule can be ide
 # Delete a detection rule by its ID
 Remove-CustomDetection -Id '12345'
 
-# Delete by detector ID (GUID from the YAML/JSON source)
+# Delete by the guid from the source file. Matches the rule id with or without the rule- prefix
 Remove-CustomDetection -DetectorId '81fb771a-c57e-41b8-9905-63dbf267c13f'
 
 # Delete by description tag UUID
@@ -395,7 +395,7 @@ The Graph API deprecated several `detectionRule` properties and removes them on 
 
 ### Legacy entity identifiers
 
-Each `impactedEntities` entry becomes one column in the matching `entityMappings` collection. The column value is the identifier name. Entries whose identifiers share a prefix, such as `accountSid` and `accountDomain`, merge into one item. A different prefix, such as `initiatingAccountName`, starts another item, so the order of the entries does not matter. An account item needs `aadUserIdColumn`, `sidColumn`, `upnColumn`, or `nameColumn` together with a domain column. A legacy item that ends up with only a name or only a domain is dropped with a warning, which matches what the API did with the legacy property. An explicit `entityMappings.accounts` item with the same gap is an error, or a warning with `-SkipIdentifierValidation`.
+Each `impactedEntities` entry becomes one column in the matching `entityMappings` collection. The column value is the identifier name with its first letter upper-cased, so `deviceId` becomes `DeviceId`. Entries whose identifiers share a prefix, such as `accountSid` and `accountDomain`, merge into one item. A different prefix, such as `initiatingAccountName`, starts another item, so the order of the entries does not matter. An account item needs `aadUserIdColumn`, `sidColumn`, `upnColumn`, or `nameColumn` together with a domain column. A legacy item that ends up with only a name or only a domain is dropped with a warning, which matches what the API did with the legacy property. An explicit `entityMappings.accounts` item with the same gap is an error, or a warning with `-SkipIdentifierValidation`.
 
 | entityType | entityIdentifier | Collection and column |
 | --- | --- | --- |
@@ -439,7 +439,7 @@ Each `impactedEntities` entry becomes one column in the matching `entityMappings
 
 ### Updates
 
-The API keeps any collection that a PATCH omits. An update therefore names every automated action and entity mapping collection, sending an empty list for the ones the YAML file does not use, and sends empty device groups when none are set. Removing an action, an entity mapping or a device group from the file removes it from the rule. Custom details are the exception. No PATCH shape clears them, so a rule keeps its custom details when the file stops setting them, and the deploy warns about it. Custom detail values must be columns the query projects.
+The API keeps any collection that a PATCH omits. An update therefore sends an empty list for every collection the rule carries and the file does not, collections this module does not know included, and names each cleared collection in a warning. Empty device groups are sent only when the rule has device groups the file does not set. Collections neither side carries are left out. Removing an action, an entity mapping or a device group from the file removes it from the rule. Custom details are the exception. No PATCH shape clears them, so a rule keeps its custom details when the file stops setting them, and the deploy warns about it. Custom detail values must be columns the query projects.
 
 ### JSON to YAML
 
@@ -562,11 +562,15 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - Request bodies are stripped of PowerShell object wrappers before they reach the Graph client, which rejected them with a self-referencing loop error
 - Updates send an empty list for every collection the rule carries and the file does not, collections this module does not know included, so an action, entity mapping or device group removed from the file is removed from the rule
 - `frequency` is normalised to the form the API stores before the change detection runs, so a value such as `PT1440M` no longer reports an update on every run
-- A rule description or recommended action the file does not set is left unchanged and no longer reports an update on every run
+- A rule description or recommended action the file does not set is left unchanged and no longer reports an update on every run. A warning names the value the rule keeps
 - Change detection is case-sensitive for text and column names, so a casing fix to a query or a column mapping now reaches the rule. Status, severity, tactic names and device group names are still compared without case
 - Legacy `impactedEntities` entries are grouped by identifier prefix, so `deviceId` and `remoteDeviceName` become two hosts instead of one host with another device's name, and the order of the entries no longer changes the result
 - Input the API rejects with an opaque message is rejected before the request with a named one: an empty device group name, a list as a column name, an action listed twice with the same fields, and an `isEnabled` value other than true or false. An action type listed twice with different fields produces a warning, since the rule keeps both
 - `ConvertTo-CustomDetectionJson` emits `id: rule-<guid>`, the value the create request carries. A YAML `id` may carry the prefix, and an exported rule keeps whatever follows the prefix as its guid
+- A plain string where a mapping is expected in `actions`, `impactedEntities` or an entity mapping list is rejected, as are an `isolationType` other than `Full` or `Selective`, a `customDetails` value that is not a string and an `organizationalScope` entry that is not a device group name. The item used to be skipped or defaulted without a word
+- Every collection an update clears is named in a warning
+- A file that carries both a legacy key and its replacement produces a warning naming the key that wins
+- JSON input is validated like YAML input. An incomplete account mapping is rejected unless `-SkipIdentifierValidation` is set, and a `status` that contradicts `isEnabled` produces a warning
 - Bugs/issues or undocumented behavior identified while testing: 
    - `PT0S` and non-MITRE tactic names such as `SuspiciousActivity` are accepted on create
    - `autoDisabled` is rejected on write and is sent as `disabled`
