@@ -179,6 +179,40 @@ queryText: DeviceEvents | where ActionType == "Test"
             { Deploy-CustomDetection -InputFile $tempFile -Confirm:$false } | Should -Throw '*aadUserIdColumn*'
         }
 
+        It 'Should drop an incomplete account mapping from JSON input when -SkipIdentifierValidation is set' {
+            $testJson = @"
+{
+    "id": "rule-81fb771a-c57e-41b8-9905-63dbf267c13f",
+    "displayName": "TEST-IncompleteAccountSkipped",
+    "status": "disabled",
+    "detectionAction": {
+        "alertTemplate": {
+            "title": "Test",
+            "description": "Test",
+            "severity": "informational",
+            "tactics": [{ "tactic": "Execution" }],
+            "entityMappings": {
+                "accounts": [{ "nameColumn": "AccountName" }],
+                "hosts": [{ "deviceIdColumn": "DeviceId" }]
+            }
+        }
+    },
+    "queryCondition": { "queryText": "DeviceEvents | take 0" },
+    "schedule": { "frequency": "PT1H" }
+}
+"@
+            $tempFile = Join-Path TestDrive: 'incomplete-account-skipped.json'
+            $testJson | Out-File -FilePath $tempFile -Encoding UTF8
+            Mock Invoke-MgGraphRequest { return @{ id = 'new-rule-id' } } -ModuleName XDRConverter
+
+            $result = Deploy-CustomDetection -InputFile $tempFile -SkipIdentifierValidation -Confirm:$false -WarningVariable warning -WarningAction SilentlyContinue
+            $result.Action | Should -Be 'Created'
+            "$warning" | Should -Match 'aadUserIdColumn'
+            Should -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -ParameterFilter {
+                $Method -eq 'POST' -and $Body.detectionAction.alertTemplate.entityMappings.Keys -notcontains 'accounts'
+            }
+        }
+
         It 'Should warn when JSON status contradicts isEnabled' {
             $testJson = @"
 {
