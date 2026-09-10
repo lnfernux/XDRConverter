@@ -130,6 +130,33 @@ Describe 'Compare-CustomDetection' {
         }
     }
 
+    It 'Detects a case-only change in <Name>' -ForEach @(
+        @{ Name = 'the query'; Path = 'queryCondition.queryText'; Value = 'deviceevents | take 1' }
+        @{ Name = 'a column name'; Path = 'detectionAction.alertTemplate.entityMappings'; Value = @{ hosts = @(@{ deviceIdColumn = 'deviceid' }) } }
+        @{ Name = 'an action column name'; Path = 'detectionAction.automatedActions'; Value = @{ isolateDevices = @(@{ deviceIdColumn = 'deviceid'; isolationType = 'full' }) } }
+        @{ Name = 'the display name'; Path = 'displayName'; Value = 'test-rule' }
+        @{ Name = 'the alert title'; Path = 'detectionAction.alertTemplate.title'; Value = 'title' }
+    ) {
+        $local = New-LocalBody -Overrides @{ $Path = $Value }
+        $remote = New-RemoteRule
+        InModuleScope XDRConverter -Parameters @{ Local = $local; Remote = $remote } {
+            Compare-CustomDetection -Local $Local -Remote $Remote | Should -Be $true
+        }
+    }
+
+    It 'Ignores a case-only difference in <Name>' -ForEach @(
+        @{ Name = 'the status'; Path = 'status'; Value = 'Enabled' }
+        @{ Name = 'the severity'; Path = 'detectionAction.alertTemplate.severity'; Value = 'Medium' }
+        @{ Name = 'the tactic name'; Path = 'detectionAction.alertTemplate.tactics'; Value = @(@{ tactic = 'execution'; techniques = @(@{ technique = 't1059'; subTechniques = @('t1059.001') }) }) }
+        @{ Name = 'a device group name'; Path = 'detectionAction.organizationalScope'; Value = @{ deviceGroups = @('servers') } }
+    ) {
+        $local = New-LocalBody -Overrides @{ $Path = $Value }
+        $remote = New-RemoteRule
+        InModuleScope XDRConverter -Parameters @{ Local = $local; Remote = $remote } {
+            Compare-CustomDetection -Local $Local -Remote $Remote | Should -Be $false
+        }
+    }
+
     It 'Treats a removed action as a change' {
         $local = New-LocalBody -Overrides @{ 'detectionAction.automatedActions' = $null }
         $remote = New-RemoteRule

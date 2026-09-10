@@ -561,6 +561,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - Updates name every action and entity mapping collection, so an action or entity removed from the file is removed from the rule
 - `frequency` is normalised to the form the API stores before the change detection runs, so a value such as `PT1440M` no longer reports an update on every run
 - A rule description or recommended action the file does not set is left unchanged and no longer reports an update on every run
+- Change detection is case-sensitive for text and column names, so a casing fix to a query or a column mapping now reaches the rule. Status, severity, tactic names and device group names are still compared without case
 - Bugs/issues or undocumented behavior identified while testing: 
    - `PT0S` and non-MITRE tactic names such as `SuspiciousActivity` are accepted on create
    - `autoDisabled` is rejected on write and is sent as `disabled`
@@ -570,6 +571,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
    - The reference marks the rule id as required on create. Live testing showed the API assigns one when it is absent, and rejects a client id that starts with a digit, so a guid needs a prefix
    - An account entity mapping needs a key column or a name plus domain pair. A name-only mapping is rejected on write, while the legacy property was silently emptied
    - `schedule.frequency` is stored in a canonical form. `PT1440M` and `P1DT0H` come back as `P1D`, `PT0H` as `PT0S` and `PT90M` as `PT1H30M`. `P1W` is rejected as not an `Edm.Duration`
+   - Entity mapping columns are matched against the query projection case-sensitively. `deviceid` is rejected when the query projects `DeviceId`
 
 ### 1.4.1
 - Included Graph API error details in deployment failure messages for easier troubleshooting

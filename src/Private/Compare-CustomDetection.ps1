@@ -21,6 +21,9 @@ function Compare-CustomDetection {
     $localState = Get-CustomDetectionComparableState -Rule $Local
     $remoteState = Get-CustomDetectionComparableState -Rule $Remote
 
+    # Enumerations and device group names are matched by the API without case. Everything else, column names included, is case-sensitive
+    $caseInsensitiveKeys = @('status', 'severity', 'tactics', 'deviceGroups')
+
     foreach ($key in $localState.Keys) {
         $localValue = "$($localState[$key])"
         $remoteValue = "$($remoteState[$key])"
@@ -39,7 +42,8 @@ function Compare-CustomDetection {
             continue
         }
 
-        if ($localValue -ne $remoteValue) {
+        $differs = if ($key -in $caseInsensitiveKeys) { $localValue -ne $remoteValue } else { $localValue -cne $remoteValue }
+        if ($differs) {
             Write-Verbose "Difference found on '$key': local='$localValue' remote='$remoteValue'"
             return $true
         }
