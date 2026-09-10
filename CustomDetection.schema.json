@@ -80,8 +80,8 @@
                 },
                 {
                     "type": "string",
-                    "pattern": "^P(?:\\d+W|(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?)$",
-                    "description": "ISO 8601 duration such as PT0S, PT1H, PT3H, PT12H, P1D or P1W"
+                    "pattern": "^P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+(?:\\.\\d+)?S)?)?$",
+                    "description": "ISO 8601 duration of days, hours, minutes and seconds such as PT0S, PT1H, PT3H, PT12H or P1D. Normalised to the form the API stores"
                 }
             ]
         },

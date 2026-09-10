@@ -26,12 +26,19 @@ Describe 'CustomDetection mapping helpers' {
             }
         }
 
-        It 'Passes ISO 8601 durations through unchanged' {
-            InModuleScope XDRConverter {
-                ConvertTo-CustomDetectionFrequency -Value 'PT1H' | Should -Be 'PT1H'
-                ConvertTo-CustomDetectionFrequency -Value 'P1D' | Should -Be 'P1D'
-                ConvertTo-CustomDetectionFrequency -Value 'PT30M' | Should -Be 'PT30M'
-                ConvertTo-CustomDetectionFrequency -Value 'P1W' | Should -Be 'P1W'
+        It 'Normalises the ISO 8601 duration <Value> to <Expected>' -ForEach @(
+            @{ Value = 'PT1H'; Expected = 'PT1H' }
+            @{ Value = 'P1D'; Expected = 'P1D' }
+            @{ Value = 'PT30M'; Expected = 'PT30M' }
+            @{ Value = 'PT1440M'; Expected = 'P1D' }
+            @{ Value = 'P1DT0H'; Expected = 'P1D' }
+            @{ Value = 'PT0H'; Expected = 'PT0S' }
+            @{ Value = 'PT90M'; Expected = 'PT1H30M' }
+            @{ Value = 'PT25H'; Expected = 'P1DT1H' }
+            @{ Value = 'pt90m'; Expected = 'PT1H30M' }
+        ) {
+            InModuleScope XDRConverter -Parameters @{ Value = $Value; Expected = $Expected } {
+                ConvertTo-CustomDetectionFrequency -Value $Value | Should -Be $Expected
             }
         }
 
@@ -47,10 +54,14 @@ Describe 'CustomDetection mapping helpers' {
             }
         }
 
-        It 'Rejects the malformed duration <Value>' -ForEach @(
+        It 'Rejects the malformed or unsupported duration <Value>' -ForEach @(
             @{ Value = 'P1DT' }
             @{ Value = 'P1W1D' }
             @{ Value = 'P' }
+            @{ Value = 'P1W' }
+            @{ Value = 'P1M' }
+            @{ Value = 'P1Y' }
+            @{ Value = '-PT1H' }
         ) {
             InModuleScope XDRConverter -Parameters @{ Value = $Value } {
                 { ConvertTo-CustomDetectionFrequency -Value $Value } | Should -Throw "*Unsupported frequency*"
@@ -65,7 +76,7 @@ Describe 'CustomDetection mapping helpers' {
 
         It 'Keeps the schema frequency pattern aligned with the converter' {
             $schema = Join-Path (Split-Path $PSScriptRoot -Parent) 'CustomDetection.schema.json'
-            foreach ($case in @(@{ Value = 'P1W'; Valid = $true }, @{ Value = 'PT30M'; Valid = $true }, @{ Value = 'P1DT'; Valid = $false }, @{ Value = 'P1W1D'; Valid = $false })) {
+            foreach ($case in @(@{ Value = 'PT1440M'; Valid = $true }, @{ Value = 'PT30M'; Valid = $true }, @{ Value = 'P1DT'; Valid = $false }, @{ Value = 'P1W'; Valid = $false }, @{ Value = 'P1M'; Valid = $false })) {
                 $json = @{ guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'; ruleName = 'r'; alertTitle = 't'; frequency = $case.Value; alertSeverity = 'Low'; alertDescription = 'd'; alertCategory = 'Execution'; queryText = 'q' } | ConvertTo-Json
                 (Test-Json -Json $json -SchemaFile $schema -ErrorAction SilentlyContinue) | Should -Be $case.Valid -Because $case.Value
             }

@@ -1,12 +1,13 @@
 function ConvertTo-CustomDetectionFrequency {
     <#
     .SYNOPSIS
-        Normalises a rule frequency to an ISO 8601 duration.
+        Normalises a rule frequency to the ISO 8601 form the API stores.
 
     .DESCRIPTION
-        Accepts the legacy period tokens (0, 1H, 3H, 12H, 24H) as well as
-        ISO 8601 durations and returns the ISO 8601 form expected by the
-        schedule.frequency property.
+        Accepts the legacy period tokens (0, 1H, 3H, 12H, 24H) and ISO 8601
+        durations made of days, hours, minutes and seconds. The result is the
+        canonical rendering the API returns, so PT1440M becomes P1D and PT90M
+        becomes PT1H30M. Weeks, months and years are rejected, as the API does.
     #>
     [CmdletBinding()]
     [OutputType([string])]
@@ -22,12 +23,11 @@ function ConvertTo-CustomDetectionFrequency {
     }
 
     $legacyMap = @{
-        '0'     = 'PT0S'
-        '1H'    = 'PT1H'
-        '3H'    = 'PT3H'
-        '12H'   = 'PT12H'
-        '24H'   = 'P1D'
-        'PT24H' = 'P1D'
+        '0'   = 'PT0S'
+        '1H'  = 'PT1H'
+        '3H'  = 'PT3H'
+        '12H' = 'PT12H'
+        '24H' = 'P1D'
     }
 
     $key = $text.ToUpperInvariant()
@@ -35,10 +35,10 @@ function ConvertTo-CustomDetectionFrequency {
         return $legacyMap[$key]
     }
 
-    # Weeks stand alone. A T marker needs at least one time component after it
-    if ($key -match '^P(?:\d+W|(?=\d|T\d)(?:\d+D)?(?:T(?=\d)(?:\d+H)?(?:\d+M)?(?:\d+S)?)?)$') {
-        return $key
+    # Edm.Duration allows days and a time part only. XmlConvert renders the canonical form the API stores
+    if ($key -match '^P(?=\d|T\d)(?:\d+D)?(?:T(?=\d)(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?$') {
+        return [System.Xml.XmlConvert]::ToString([System.Xml.XmlConvert]::ToTimeSpan($key))
     }
 
-    throw "Unsupported frequency '$text'. Use 0, 1H, 3H, 12H, 24H or an ISO 8601 duration such as PT1H."
+    throw "Unsupported frequency '$text'. Use 0, 1H, 3H, 12H, 24H or an ISO 8601 duration of days, hours, minutes and seconds such as PT1H."
 }

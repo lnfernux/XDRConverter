@@ -378,7 +378,7 @@ The Graph API deprecated several `detectionRule` properties and removes them on 
 | description | No | `description` | Rule description shown in the portal rule list |
 | status | No | `status` | `enabled`, `disabled` or `autoDisabled`. Wins over `isEnabled` |
 | isEnabled | No | `status` | Legacy. `true` becomes `enabled`, `false` becomes `disabled`. Defaults to enabled |
-| frequency | Yes | `schedule.frequency` | ISO 8601 duration (`PT0S`, `PT1H`, `PT3H`, `PT12H`, `P1D`). Other well-formed durations pass through unchanged. Legacy tokens `0`, `1H`, `3H`, `12H`, `24H` are translated |
+| frequency | Yes | `schedule.frequency` | ISO 8601 duration of days, hours, minutes and seconds. Normalised to the form the API stores, so `PT1440M` and `P1DT0H` become `P1D` and `PT90M` becomes `PT1H30M`. Weeks, months and years are rejected. Legacy tokens `0`, `1H`, `3H`, `12H`, `24H` are translated |
 | alertTitle | Yes | `detectionAction.alertTemplate.title` | |
 | alertSeverity | Yes | `detectionAction.alertTemplate.severity` | |
 | alertDescription | Yes | `detectionAction.alertTemplate.description` | The description tag is appended on deploy |
@@ -559,6 +559,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - OData annotations on entity mappings and automated actions are ignored
 - Request bodies are stripped of PowerShell object wrappers before they reach the Graph client, which rejected them with a self-referencing loop error
 - Updates name every action and entity mapping collection, so an action or entity removed from the file is removed from the rule
+- `frequency` is normalised to the form the API stores before the change detection runs, so a value such as `PT1440M` no longer reports an update on every run
 - Bugs/issues or undocumented behavior identified while testing: 
    - `PT0S` and non-MITRE tactic names such as `SuspiciousActivity` are accepted on create
    - `autoDisabled` is rejected on write and is sent as `disabled`
@@ -567,6 +568,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
    - Custom details cannot be cleared once set
    - The reference marks the rule id as required on create. Live testing showed the API assigns one when it is absent, and rejects a client id that starts with a digit, so a guid needs a prefix
    - An account entity mapping needs a key column or a name plus domain pair. A name-only mapping is rejected on write, while the legacy property was silently emptied
+   - `schedule.frequency` is stored in a canonical form. `PT1440M` and `P1DT0H` come back as `P1D`, `PT0H` as `PT0S` and `PT90M` as `PT1H30M`. `P1W` is rejected as not an `Edm.Duration`
 
 ### 1.4.1
 - Included Graph API error details in deployment failure messages for easier troubleshooting
