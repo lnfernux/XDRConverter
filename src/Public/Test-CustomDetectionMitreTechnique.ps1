@@ -96,17 +96,25 @@ function Test-CustomDetectionMitreTechnique {
             # Build one (category, techniques) pair per tactic. A tactics list wins over the legacy keys.
             $sets = [System.Collections.Generic.List[object]]::new()
             if ($yamlObj.tactics) {
-                foreach ($tactic in @(ConvertTo-CustomDetectionTactics -Tactics $yamlObj.tactics)) {
+                # Entries are validated as written. A listed parent counts alongside its sub-techniques, a derived one does not
+                foreach ($tacticItem in @($yamlObj.tactics)) {
+                    $tactic = ConvertTo-CustomDetectionHashtable -InputObject $tacticItem
+                    if (-not $tactic) { continue }
                     $flattened = [System.Collections.Generic.List[string]]::new()
-                    foreach ($technique in @($tactic.techniques)) {
+                    foreach ($technique in @($tactic['techniques'])) {
                         if ($null -eq $technique) { continue }
-                        if ($technique.subTechniques -and @($technique.subTechniques).Count -gt 0) {
-                            foreach ($sub in $technique.subTechniques) { $flattened.Add("$sub") }
-                        } else {
-                            $flattened.Add("$($technique.technique)")
+                        if ($technique -is [string]) {
+                            if ($technique.Trim()) { $flattened.Add($technique.Trim()) }
+                            continue
+                        }
+                        $entry = ConvertTo-CustomDetectionHashtable -InputObject $technique
+                        if (-not $entry) { continue }
+                        if ("$($entry['technique'])".Trim()) { $flattened.Add("$($entry['technique'])".Trim()) }
+                        foreach ($sub in @($entry['subTechniques'])) {
+                            if ("$sub".Trim()) { $flattened.Add("$sub".Trim()) }
                         }
                     }
-                    $sets.Add(@{ Category = $tactic.tactic; Techniques = $flattened.ToArray() })
+                    $sets.Add(@{ Category = "$($tactic['tactic'])"; Techniques = $flattened.ToArray() })
                 }
             } else {
                 $category = $yamlObj.alertCategory

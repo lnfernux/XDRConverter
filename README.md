@@ -549,7 +549,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - Change detection compares every managed property, so changes to actions, entity mappings, techniques or device groups trigger an update
 - The detection id cache is cleared after a create or delete
 - JSON input files are normalised before deployment, so legacy JSON exports deploy with the current body
-- `Test-CustomDetectionMitreTechnique` accepts a `tactics` list and validates each tactic
+- `Test-CustomDetectionMitreTechnique` accepts a `tactics` list and validates each tactic. The parent technique of a grouped entry is validated together with its sub-techniques
 - `ConvertTo-CustomDetectionYaml -LegacyKeys` emits the legacy YAML keys for files that must stay in the old form. Column mappings the legacy identifiers cannot express are dropped with a warning
 - The legacy entity types IP, URL, FileHash, Process, RegistryKey and RegistryValue now deploy. Version 1.4.1 turned them into impactedAsset types the API does not have
 - With `-NoDescriptionTag`, an existing rule is found through its display name, which the API keeps unique

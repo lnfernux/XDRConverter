@@ -198,7 +198,15 @@ queryText: DeviceEvents | take 1
             $result = $obj | Test-CustomDetectionMitreTechnique
             $result.IsValid | Should -Be $true
             $result.Category | Should -Be 'DefenseEvasion'
-            $result.ValidTechniques | Should -Be @('T1070.001')
+            $result.ValidTechniques | Should -Be @('T1070', 'T1070.001')
+        }
+
+        It 'Should report an unsupported parent technique that carries valid sub-techniques' {
+            $obj = [PSCustomObject]@{ tactics = @(@{ tactic = 'Execution'; techniques = @(@{ technique = 'T9999'; subTechniques = @('T1059.001') }) }) }
+            $result = $obj | Test-CustomDetectionMitreTechnique -WarningAction SilentlyContinue
+            $result.IsValid | Should -Be $false
+            $result.InvalidTechniques | Should -Be @('T9999')
+            $result.ValidTechniques | Should -Be @('T1059.001')
         }
 
         It 'Should validate the parent technique when no sub-techniques are listed' {
