@@ -1,20 +1,23 @@
 function Get-CustomDetectionIdByDetectorId {
     <#
     .SYNOPSIS
-        Gets the detection rule ID by its guid.
+        Gets the detection rule ID by the guid from the source file.
 
     .DESCRIPTION
         Looks up a detection rule whose rule ID equals the given guid, with or
-        without the rule prefix. The name is kept for compatibility. The legacy
-        detector ID is no longer requested from the API.
+        without the rule prefix, then a rule whose description tag carries the
+        guid, which is how rules created before the rule ID carried it are
+        found. The name is kept for compatibility. The legacy detector ID is
+        no longer requested from the API.
 
     .PARAMETER DetectorId
-        The guid to look up. Matched against the rule ID in its plain and rule-prefixed forms.
+        The guid from the source file. Matched against the rule ID in its plain
+        and rule-prefixed forms, then against the description tag.
 
     .EXAMPLE
         Get-CustomDetectionIdByDetectorId -DetectorId "81fb771a-c57e-41b8-9905-63dbf267c13f"
 
-        Returns the detection rule ID for the specified detector ID.
+        Returns the detection rule ID of the rule the guid names.
 
     .NOTES
         Requires the Microsoft.Graph.Authentication module and an active Graph API session.
@@ -37,8 +40,11 @@ function Get-CustomDetectionIdByDetectorId {
             # Leverage the cached detection IDs list
             $detectionIds = Get-CustomDetectionIds
 
-            # Match the rule id in its plain and rule-prefixed forms
+            # Match the rule id in its plain and rule-prefixed forms, then the description tag
             $detectionRule = $detectionIds | Where-Object { $_.Id -eq $DetectorId -or $_.Id -eq "rule-$DetectorId" } | Select-Object -First 1
+            if (-not $detectionRule) {
+                $detectionRule = $detectionIds | Where-Object { $_.DescriptionTag -eq $DetectorId } | Select-Object -First 1
+            }
 
             if ($detectionRule) {
                 return $detectionRule.Id

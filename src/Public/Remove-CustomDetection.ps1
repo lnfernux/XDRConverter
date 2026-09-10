@@ -5,9 +5,10 @@ function Remove-CustomDetection {
 
     .DESCRIPTION
         Removes a detection rule via the Microsoft Graph API. The rule can be
-        identified by its detection rule Id, its DetectorId (the GUID embedded
-        in the YAML/JSON source), or by the DescriptionTag UUID that was
-        appended to the alert description during deployment.
+        identified by its detection rule Id, by the guid from the source file
+        (matched against the rule Id and then the description tag), or by the
+        DescriptionTag UUID that was appended to the alert description during
+        deployment.
 
         Only one identification method may be used per call (parameter sets).
 
@@ -15,8 +16,9 @@ function Remove-CustomDetection {
         The detection rule ID as returned by the Graph API.
 
     .PARAMETER DetectorId
-        The detector ID (GUID from the source file). Resolved to the rule ID
-        via Get-CustomDetectionIdByDetectorId.
+        The guid from the source file. Resolved to the rule ID via
+        Get-CustomDetectionIdByDetectorId, which matches the rule ID with or
+        without the rule prefix and then the description tag.
 
     .PARAMETER DescriptionTag
         The UUID tag embedded in the alert description. Resolved to the rule ID
@@ -30,7 +32,7 @@ function Remove-CustomDetection {
     .EXAMPLE
         Remove-CustomDetection -DetectorId "81fb771a-c57e-41b8-9905-63dbf267c13f"
 
-        Looks up and deletes the detection rule that matches the given detector ID.
+        Looks up and deletes the detection rule the guid names.
 
     .EXAMPLE
         Remove-CustomDetection -DescriptionTag "81fb771a-c57e-41b8-9905-63dbf267c13f"

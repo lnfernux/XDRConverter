@@ -571,6 +571,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - Every collection an update clears is named in a warning
 - A file that carries both a legacy key and its replacement produces a warning naming the key that wins
 - JSON input is validated like YAML input. An incomplete account mapping is rejected unless `-SkipIdentifierValidation` is set, and a `status` that contradicts `isEnabled` produces a warning
+- `Get-CustomDetectionIdByDetectorId` falls back to the description tag, so `Remove-CustomDetection -DetectorId` finds a rule created before the rule id carried the guid
 - Bugs/issues or undocumented behavior identified while testing: 
    - `PT0S` and non-MITRE tactic names such as `SuspiciousActivity` are accepted on create
    - `autoDisabled` is rejected on write and is sent as `disabled`
