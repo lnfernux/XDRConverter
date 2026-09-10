@@ -573,6 +573,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - JSON input is validated like YAML input. An incomplete account mapping is rejected unless `-SkipIdentifierValidation` is set, and a `status` that contradicts `isEnabled` produces a warning
 - `Get-CustomDetectionIdByDetectorId` falls back to the description tag, so `Remove-CustomDetection -DetectorId` finds a rule created before the rule id carried the guid
 - Action fields in `additionalFields` are written under their documented name whatever the casing in the file, so `Sha256Column` no longer reports an update on every run
+- The editor schema accepts the `rule-` prefix on `id` and lists the documented columns of every entity mapping collection, so it rejects the column names the converter rejects
 - Bugs/issues or undocumented behavior identified while testing: 
    - `PT0S` and non-MITRE tactic names such as `SuspiciousActivity` are accepted on create
    - `autoDisabled` is rejected on write and is sent as `disabled`

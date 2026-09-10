@@ -14,14 +14,6 @@
             "type": "string",
             "minLength": 1,
             "description": "Name of the query result column"
-        },
-        "mappingItems": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-                "type": "object",
-                "minProperties": 1
-            }
         }
     },
     "properties": {
@@ -30,8 +22,9 @@
             "description": "A unique UUID that identifies the rule in its source files. New rules get the rule id rule-<guid> and the guid also travels in the alert description tag"
         },
         "id": {
-            "$ref": "#/definitions/uuid",
-            "description": "Alias of guid. When both are present they must be equal"
+            "type": "string",
+            "pattern": "^(rule-)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "description": "Alias of guid, with or without the rule- prefix. When both are present they must be equal"
         },
         "ruleName": {
             "type": "string",
@@ -124,8 +117,8 @@
             ]
         },
         "mitreTechniques": {
-            "type": "array",
-            "description": "Legacy flat list of MITRE ATT&CK technique IDs. Grouped under the alertCategory tactic. Ignored when tactics is present",
+            "type": ["array", "null"],
+            "description": "Legacy flat list of MITRE ATT&CK technique IDs. An empty key is accepted. Grouped under the alertCategory tactic. Ignored when tactics is present",
             "items": {
                 "type": "string",
                 "pattern": "^T\\d{4}(\\.\\d{3})?$",
@@ -234,71 +227,248 @@
             "additionalProperties": false,
             "properties": {
                 "accounts": {
-                    "$ref": "#/definitions/mappingItems",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "minProperties": 1,
+                        "additionalProperties": false,
+                        "properties": {
+                                "aadUserIdColumn": { "$ref": "#/definitions/columnName" },
+                                "dnsDomainColumn": { "$ref": "#/definitions/columnName" },
+                                "nameColumn": { "$ref": "#/definitions/columnName" },
+                                "ntDomainColumn": { "$ref": "#/definitions/columnName" },
+                                "sidColumn": { "$ref": "#/definitions/columnName" },
+                                "upnColumn": { "$ref": "#/definitions/columnName" },
+                                "upnSuffixColumn": { "$ref": "#/definitions/columnName" }
+                        }
+                    },
                     "description": "Columns: aadUserIdColumn, dnsDomainColumn, nameColumn, ntDomainColumn, sidColumn, upnColumn, upnSuffixColumn"
                 },
                 "amazonResources": {
-                    "$ref": "#/definitions/mappingItems",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "minProperties": 1,
+                        "additionalProperties": false,
+                        "properties": {
+                                "amazonResourceIdColumn": { "$ref": "#/definitions/columnName" }
+                        }
+                    },
                     "description": "Columns: amazonResourceIdColumn"
                 },
                 "azureResources": {
-                    "$ref": "#/definitions/mappingItems",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "minProperties": 1,
+                        "additionalProperties": false,
+                        "properties": {
+                                "resourceIdColumn": { "$ref": "#/definitions/columnName" }
+                        }
+                    },
                     "description": "Columns: resourceIdColumn"
                 },
                 "cloudApplications": {
-                    "$ref": "#/definitions/mappingItems",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "minProperties": 1,
+                        "additionalProperties": false,
+                        "properties": {
+                                "appIdColumn": { "$ref": "#/definitions/columnName" },
+                                "nameColumn": { "$ref": "#/definitions/columnName" }
+                        }
+                    },
                     "description": "Columns: appIdColumn, nameColumn"
                 },
                 "dns": {
-                    "$ref": "#/definitions/mappingItems",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "minProperties": 1,
+                        "additionalProperties": false,
+                        "properties": {
+                                "domainNameColumn": { "$ref": "#/definitions/columnName" },
+                                "hostIpAddressColumn": { "$ref": "#/definitions/columnName" },
+                                "serverIpColumn": { "$ref": "#/definitions/columnName" }
+                        }
+                    },
                     "description": "Columns: domainNameColumn, hostIpAddressColumn, serverIpColumn"
                 },
                 "files": {
-                    "$ref": "#/definitions/mappingItems",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "minProperties": 1,
+                        "additionalProperties": false,
+                        "properties": {
+                                "nameColumn": { "$ref": "#/definitions/columnName" },
+                                "sha1Column": { "$ref": "#/definitions/columnName" },
+                                "sha256Column": { "$ref": "#/definitions/columnName" }
+                        }
+                    },
                     "description": "Columns: nameColumn, sha1Column, sha256Column"
                 },
                 "googleCloudResources": {
-                    "$ref": "#/definitions/mappingItems",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "minProperties": 1,
+                        "additionalProperties": false,
+                        "properties": {
+                                "fullResourceNameColumn": { "$ref": "#/definitions/columnName" }
+                        }
+                    },
                     "description": "Columns: fullResourceNameColumn"
                 },
                 "hosts": {
-                    "$ref": "#/definitions/mappingItems",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "minProperties": 1,
+                        "additionalProperties": false,
+                        "properties": {
+                                "deviceIdColumn": { "$ref": "#/definitions/columnName" },
+                                "dnsDomainColumn": { "$ref": "#/definitions/columnName" },
+                                "nameColumn": { "$ref": "#/definitions/columnName" },
+                                "netBiosNameColumn": { "$ref": "#/definitions/columnName" },
+                                "ntDomainColumn": { "$ref": "#/definitions/columnName" }
+                        }
+                    },
                     "description": "Columns: deviceIdColumn, dnsDomainColumn, nameColumn, netBiosNameColumn, ntDomainColumn"
                 },
                 "ips": {
-                    "$ref": "#/definitions/mappingItems",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "minProperties": 1,
+                        "additionalProperties": false,
+                        "properties": {
+                                "addressColumn": { "$ref": "#/definitions/columnName" },
+                                "scopeColumn": { "$ref": "#/definitions/columnName" }
+                        }
+                    },
                     "description": "Columns: addressColumn, scopeColumn"
                 },
                 "mailboxes": {
-                    "$ref": "#/definitions/mappingItems",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "minProperties": 1,
+                        "additionalProperties": false,
+                        "properties": {
+                                "primaryAddressColumn": { "$ref": "#/definitions/columnName" }
+                        }
+                    },
                     "description": "Columns: primaryAddressColumn"
                 },
                 "mailClusters": {
-                    "$ref": "#/definitions/mappingItems",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "minProperties": 1,
+                        "additionalProperties": false,
+                        "properties": {
+                                "queryColumn": { "$ref": "#/definitions/columnName" },
+                                "sourceColumn": { "$ref": "#/definitions/columnName" }
+                        }
+                    },
                     "description": "Columns: queryColumn, sourceColumn"
                 },
                 "mailMessages": {
-                    "$ref": "#/definitions/mappingItems",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "minProperties": 1,
+                        "additionalProperties": false,
+                        "properties": {
+                                "networkMessageIdColumn": { "$ref": "#/definitions/columnName" },
+                                "recipientColumn": { "$ref": "#/definitions/columnName" },
+                                "senderColumn": { "$ref": "#/definitions/columnName" },
+                                "subjectColumn": { "$ref": "#/definitions/columnName" }
+                        }
+                    },
                     "description": "Columns: networkMessageIdColumn, recipientColumn, senderColumn, subjectColumn"
                 },
                 "oAuthApplications": {
-                    "$ref": "#/definitions/mappingItems",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "minProperties": 1,
+                        "additionalProperties": false,
+                        "properties": {
+                                "oAuthAppIdColumn": { "$ref": "#/definitions/columnName" }
+                        }
+                    },
                     "description": "Columns: oAuthAppIdColumn"
                 },
                 "processes": {
-                    "$ref": "#/definitions/mappingItems",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "minProperties": 1,
+                        "additionalProperties": false,
+                        "properties": {
+                                "sha1Column": { "$ref": "#/definitions/columnName" },
+                                "sha256Column": { "$ref": "#/definitions/columnName" }
+                        }
+                    },
                     "description": "Columns: sha1Column, sha256Column"
                 },
                 "registryValues": {
-                    "$ref": "#/definitions/mappingItems",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "minProperties": 1,
+                        "additionalProperties": false,
+                        "properties": {
+                                "keyColumn": { "$ref": "#/definitions/columnName" },
+                                "valueNameColumn": { "$ref": "#/definitions/columnName" }
+                        }
+                    },
                     "description": "Columns: keyColumn, valueNameColumn"
                 },
                 "securityGroups": {
-                    "$ref": "#/definitions/mappingItems",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "minProperties": 1,
+                        "additionalProperties": false,
+                        "properties": {
+                                "distinguishedNameColumn": { "$ref": "#/definitions/columnName" },
+                                "objectIdColumn": { "$ref": "#/definitions/columnName" },
+                                "sidColumn": { "$ref": "#/definitions/columnName" }
+                        }
+                    },
                     "description": "Columns: distinguishedNameColumn, objectIdColumn, sidColumn"
                 },
                 "urls": {
-                    "$ref": "#/definitions/mappingItems",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "minProperties": 1,
+                        "additionalProperties": false,
+                        "properties": {
+                                "addressColumn": { "$ref": "#/definitions/columnName" }
+                        }
+                    },
                     "description": "Columns: addressColumn"
                 }
             }
