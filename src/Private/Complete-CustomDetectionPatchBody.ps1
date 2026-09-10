@@ -25,19 +25,6 @@ function Complete-CustomDetectionPatchBody {
         [PSObject]$Remote
     )
 
-    function Get-Value {
-        param([object]$Object, [string]$Path)
-        $current = $Object
-        foreach ($segment in $Path.Split('.')) {
-            if ($null -eq $current) { return $null }
-            $map = ConvertTo-CustomDetectionHashtable -InputObject $current
-            if ($null -eq $map) { return $null }
-            if (-not $map.Contains($segment)) { return $null }
-            $current = $map[$segment]
-        }
-        return $current
-    }
-
     # Collections the remote rule carries with at least one item, annotations excluded
     function Get-RemoteCollectionList {
         param([object]$Source)
@@ -91,14 +78,14 @@ function Complete-CustomDetectionPatchBody {
     }
     $detectionAction['alertTemplate'] = $alertTemplate
 
-    $entityMappings = Merge-CollectionSet -Local $alertTemplate['entityMappings'] -Known @((Get-CustomDetectionEntityMappingColumns).Keys) -RemoteSource (Get-Value -Object $Remote -Path 'detectionAction.alertTemplate.entityMappings')
+    $entityMappings = Merge-CollectionSet -Local $alertTemplate['entityMappings'] -Known @((Get-CustomDetectionEntityMappingColumns).Keys) -RemoteSource (Get-CustomDetectionValue -Object $Remote -Path 'detectionAction.alertTemplate.entityMappings')
     if ($entityMappings.Count -gt 0) {
         $alertTemplate['entityMappings'] = $entityMappings
     } else {
         $alertTemplate.Remove('entityMappings')
     }
 
-    $automatedActions = Merge-CollectionSet -Local $detectionAction['automatedActions'] -Known @((Get-CustomDetectionActionMap).Collection) -RemoteSource (Get-Value -Object $Remote -Path 'detectionAction.automatedActions')
+    $automatedActions = Merge-CollectionSet -Local $detectionAction['automatedActions'] -Known @((Get-CustomDetectionActionMap).Collection) -RemoteSource (Get-CustomDetectionValue -Object $Remote -Path 'detectionAction.automatedActions')
     if ($automatedActions.Count -gt 0) {
         $detectionAction['automatedActions'] = $automatedActions
     } else {
@@ -106,7 +93,7 @@ function Complete-CustomDetectionPatchBody {
     }
 
     if (-not $detectionAction.Contains('organizationalScope') -or $null -eq $detectionAction['organizationalScope']) {
-        $remoteScope = ConvertTo-CustomDetectionHashtable -InputObject (Get-Value -Object $Remote -Path 'detectionAction.organizationalScope')
+        $remoteScope = ConvertTo-CustomDetectionHashtable -InputObject (Get-CustomDetectionValue -Object $Remote -Path 'detectionAction.organizationalScope')
         $remoteHasGroups = $false
         if ($null -ne $remoteScope) {
             foreach ($key in @('deviceGroups', 'scopeNames')) {

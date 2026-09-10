@@ -42,103 +42,70 @@ function ConvertFrom-CustomDetectionJsonToYaml {
         'queryText'
     )
 
-    function Get-Value {
-        param([object]$Object, [string]$Path)
-        $current = $Object
-        foreach ($segment in $Path.Split('.')) {
-            if ($null -eq $current) { return $null }
-            $map = ConvertTo-CustomDetectionHashtable -InputObject $current
-            if ($null -eq $map) { return $null }
-            if (-not $map.Contains($segment)) { return $null }
-            $current = $map[$segment]
-        }
-        return $current
-    }
-
-    function Test-HasItems {
-        param([object]$Value)
-        $map = ConvertTo-CustomDetectionHashtable -InputObject $Value
-        if ($null -eq $map) { return $false }
-        foreach ($key in $map.Keys) {
-            $item = $map[$key]
-            if ($null -ne $item -and @($item).Count -gt 0) { return $true }
-        }
-        return $false
-    }
-
-    function Test-HasValue {
-        param([object]$Value)
-        if ($null -eq $Value) { return $false }
-        if ($Value -is [string]) { return -not [string]::IsNullOrWhiteSpace($Value) }
-        if ($Value -is [System.Collections.IDictionary]) { return $Value.Count -gt 0 }
-        if ($Value -is [System.Collections.IEnumerable]) { return @($Value).Count -gt 0 }
-        return $true
-    }
-
     # Strip the description tag from the alert description
     $uuidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
-    $alertDescription = Get-Value -Object $JsonObject -Path 'detectionAction.alertTemplate.description'
+    $alertDescription = Get-CustomDetectionValue -Object $JsonObject -Path 'detectionAction.alertTemplate.description'
     if ($alertDescription) {
         $alertDescription = ($alertDescription -replace "\s*\[(?:[^:\]]*:)?$uuidPattern\]", '').Trim()
     }
 
     # Keep the raw status here so an autoDisabled rule exports as such; the forward path maps it on deploy
-    $rawStatus = "$(Get-Value -Object $JsonObject -Path 'status')".Trim()
+    $rawStatus = "$(Get-CustomDetectionValue -Object $JsonObject -Path 'status')".Trim()
     $status = if ($PSBoundParameters.ContainsKey('SetEnabled')) {
         ConvertTo-CustomDetectionStatus -IsEnabled $SetEnabled
     } elseif ($rawStatus -eq 'autoDisabled') {
         'autoDisabled'
     } else {
-        ConvertTo-CustomDetectionStatus -IsEnabled (Get-Value -Object $JsonObject -Path 'isEnabled') -Status $rawStatus -WarningAction SilentlyContinue
+        ConvertTo-CustomDetectionStatus -IsEnabled (Get-CustomDetectionValue -Object $JsonObject -Path 'isEnabled') -Status $rawStatus -WarningAction SilentlyContinue
     }
 
     $severity = if ($PSBoundParameters.ContainsKey('SetSeverity')) {
         $SetSeverity
     } else {
-        $rawSeverity = Get-Value -Object $JsonObject -Path 'detectionAction.alertTemplate.severity'
+        $rawSeverity = Get-CustomDetectionValue -Object $JsonObject -Path 'detectionAction.alertTemplate.severity'
         if ($rawSeverity) { (Get-Culture).TextInfo.ToTitleCase("$rawSeverity".ToLowerInvariant()) } else { $null }
     }
 
     $yamlObj = [ordered]@{
         guid             = Get-CustomDetectionIdentity -Rule $JsonObject
-        ruleName         = Get-Value -Object $JsonObject -Path 'displayName'
+        ruleName         = Get-CustomDetectionValue -Object $JsonObject -Path 'displayName'
         isEnabled        = ($status -eq 'enabled')
-        alertTitle       = Get-Value -Object $JsonObject -Path 'detectionAction.alertTemplate.title'
+        alertTitle       = Get-CustomDetectionValue -Object $JsonObject -Path 'detectionAction.alertTemplate.title'
         alertSeverity    = $severity
         alertDescription = $alertDescription
-        queryText        = Get-Value -Object $JsonObject -Path 'queryCondition.queryText'
+        queryText        = Get-CustomDetectionValue -Object $JsonObject -Path 'queryCondition.queryText'
     }
 
     if ($status -notin @('enabled', 'disabled')) {
         $yamlObj['status'] = $status
     }
 
-    $description = Get-Value -Object $JsonObject -Path 'description'
-    if (Test-HasValue $description) {
+    $description = Get-CustomDetectionValue -Object $JsonObject -Path 'description'
+    if (Test-CustomDetectionValue $description) {
         $yamlObj['description'] = $description
     }
 
-    $frequencySource = Get-Value -Object $JsonObject -Path 'schedule.frequency'
-    if (-not (Test-HasValue $frequencySource)) {
-        $frequencySource = Get-Value -Object $JsonObject -Path 'schedule.period'
+    $frequencySource = Get-CustomDetectionValue -Object $JsonObject -Path 'schedule.frequency'
+    if (-not (Test-CustomDetectionValue $frequencySource)) {
+        $frequencySource = Get-CustomDetectionValue -Object $JsonObject -Path 'schedule.period'
     }
-    if (Test-HasValue $frequencySource) {
+    if (Test-CustomDetectionValue $frequencySource) {
         $yamlObj['frequency'] = ConvertTo-CustomDetectionFrequency -Value $frequencySource
     }
 
-    $recommendedActions = Get-Value -Object $JsonObject -Path 'detectionAction.alertTemplate.recommendedActions'
-    if (Test-HasValue $recommendedActions) {
+    $recommendedActions = Get-CustomDetectionValue -Object $JsonObject -Path 'detectionAction.alertTemplate.recommendedActions'
+    if (Test-CustomDetectionValue $recommendedActions) {
         $yamlObj['alertRecommendedAction'] = $recommendedActions
     }
 
-    $tacticsSource = Get-Value -Object $JsonObject -Path 'detectionAction.alertTemplate.tactics'
+    $tacticsSource = Get-CustomDetectionValue -Object $JsonObject -Path 'detectionAction.alertTemplate.tactics'
     $tactics = @()
-    if (Test-HasValue $tacticsSource) {
+    if (Test-CustomDetectionValue $tacticsSource) {
         $tactics = @(ConvertTo-CustomDetectionTactics -Tactics $tacticsSource)
     } else {
-        $category = Get-Value -Object $JsonObject -Path 'detectionAction.alertTemplate.category'
-        if (Test-HasValue $category) {
-            $techniques = @(Get-Value -Object $JsonObject -Path 'detectionAction.alertTemplate.mitreTechniques' | Where-Object { $_ })
+        $category = Get-CustomDetectionValue -Object $JsonObject -Path 'detectionAction.alertTemplate.category'
+        if (Test-CustomDetectionValue $category) {
+            $techniques = @(Get-CustomDetectionValue -Object $JsonObject -Path 'detectionAction.alertTemplate.mitreTechniques' | Where-Object { $_ })
             $tactics = @(ConvertTo-CustomDetectionTactics -Category "$category" -Techniques $techniques)
         }
     }
@@ -146,13 +113,13 @@ function ConvertFrom-CustomDetectionJsonToYaml {
         $yamlObj['tactics'] = [object[]]$tactics
     }
 
-    $entityMappingsSource = Get-Value -Object $JsonObject -Path 'detectionAction.alertTemplate.entityMappings'
+    $entityMappingsSource = Get-CustomDetectionValue -Object $JsonObject -Path 'detectionAction.alertTemplate.entityMappings'
     $entityMappings = $null
-    if (Test-HasItems -Value $entityMappingsSource) {
+    if (Test-CustomDetectionCollection -Value $entityMappingsSource) {
         $entityMappings = ConvertFrom-CustomDetectionEntityMappings -EntityMappings $entityMappingsSource
     } else {
-        $impactedAssets = Get-Value -Object $JsonObject -Path 'detectionAction.alertTemplate.impactedAssets'
-        if (Test-HasValue $impactedAssets) {
+        $impactedAssets = Get-CustomDetectionValue -Object $JsonObject -Path 'detectionAction.alertTemplate.impactedAssets'
+        if (Test-CustomDetectionValue $impactedAssets) {
             $entityMappings = ConvertFrom-CustomDetectionEntityMappings -ImpactedAssets @($impactedAssets)
         }
     }
@@ -160,11 +127,11 @@ function ConvertFrom-CustomDetectionJsonToYaml {
         $yamlObj['entityMappings'] = $entityMappings
     }
 
-    $customDetailsSource = ConvertTo-CustomDetectionHashtable -InputObject (Get-Value -Object $JsonObject -Path 'detectionAction.alertTemplate.customDetails')
+    $customDetailsSource = ConvertTo-CustomDetectionHashtable -InputObject (Get-CustomDetectionValue -Object $JsonObject -Path 'detectionAction.alertTemplate.customDetails')
     if ($customDetailsSource -and $customDetailsSource.Count -gt 0) {
         $customDetails = [ordered]@{}
         foreach ($key in $customDetailsSource.Keys) {
-            if (Test-HasValue $customDetailsSource[$key]) {
+            if (Test-CustomDetectionValue $customDetailsSource[$key]) {
                 $customDetails[[string]$key] = "$($customDetailsSource[$key])"
             }
         }
@@ -173,14 +140,14 @@ function ConvertFrom-CustomDetectionJsonToYaml {
         }
     }
 
-    $scopeSource = Get-Value -Object $JsonObject -Path 'detectionAction.organizationalScope'
+    $scopeSource = Get-CustomDetectionValue -Object $JsonObject -Path 'detectionAction.organizationalScope'
     $deviceGroups = @()
     if ($null -ne $scopeSource) {
         $scopeMap = ConvertTo-CustomDetectionHashtable -InputObject $scopeSource
         if ($null -ne $scopeMap) {
-            if (Test-HasValue $scopeMap['deviceGroups']) {
+            if (Test-CustomDetectionValue $scopeMap['deviceGroups']) {
                 $deviceGroups = @($scopeMap['deviceGroups'])
-            } elseif (Test-HasValue $scopeMap['scopeNames']) {
+            } elseif (Test-CustomDetectionValue $scopeMap['scopeNames']) {
                 $deviceGroups = @($scopeMap['scopeNames'])
             }
         } else {
@@ -191,13 +158,13 @@ function ConvertFrom-CustomDetectionJsonToYaml {
         $yamlObj['organizationalScope'] = [object[]]@($deviceGroups | ForEach-Object { "$_" })
     }
 
-    $automatedActionsSource = Get-Value -Object $JsonObject -Path 'detectionAction.automatedActions'
+    $automatedActionsSource = Get-CustomDetectionValue -Object $JsonObject -Path 'detectionAction.automatedActions'
     $actions = @()
-    if (Test-HasItems -Value $automatedActionsSource) {
+    if (Test-CustomDetectionCollection -Value $automatedActionsSource) {
         $actions = @(ConvertFrom-CustomDetectionAutomatedActions -AutomatedActions $automatedActionsSource)
     } else {
-        $responseActions = Get-Value -Object $JsonObject -Path 'detectionAction.responseActions'
-        if (Test-HasValue $responseActions) {
+        $responseActions = Get-CustomDetectionValue -Object $JsonObject -Path 'detectionAction.responseActions'
+        if (Test-CustomDetectionValue $responseActions) {
             $translated = ConvertTo-CustomDetectionAutomatedActions -ResponseActions @($responseActions)
             $actions = @(ConvertFrom-CustomDetectionAutomatedActions -AutomatedActions $translated)
         }

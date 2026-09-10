@@ -49,20 +49,11 @@ function ConvertFrom-CustomDetectionYamlToJson {
         return $null
     }
 
-    function Test-HasValue {
-        param([object]$Value)
-        if ($null -eq $Value) { return $false }
-        if ($Value -is [string]) { return -not [string]::IsNullOrWhiteSpace($Value) }
-        if ($Value -is [System.Collections.IDictionary]) { return $Value.Count -gt 0 }
-        if ($Value -is [System.Collections.IEnumerable]) { return @($Value).Count -gt 0 }
-        return $true
-    }
-
     # The guid and the id alias name the same rule, with or without the rule prefix the request carries
     $guid = Get-YamlValue -Key 'guid'
     $idAlias = Get-YamlValue -Key 'id'
-    $bareGuid = if (Test-HasValue $guid) { "$guid".Trim() -replace '^rule-', '' } else { $null }
-    $bareAlias = if (Test-HasValue $idAlias) { "$idAlias".Trim() -replace '^rule-', '' } else { $null }
+    $bareGuid = if (Test-CustomDetectionValue $guid) { "$guid".Trim() -replace '^rule-', '' } else { $null }
+    $bareAlias = if (Test-CustomDetectionValue $idAlias) { "$idAlias".Trim() -replace '^rule-', '' } else { $null }
     if ($bareGuid -and $bareAlias -and ($bareGuid -ne $bareAlias)) {
         throw "The guid '$guid' and id '$idAlias' differ. Use one of them."
     }
@@ -79,7 +70,7 @@ function ConvertFrom-CustomDetectionYamlToJson {
     } else {
         Get-YamlValue -Key 'alertSeverity'
     }
-    if (-not (Test-HasValue $severity)) {
+    if (-not (Test-CustomDetectionValue $severity)) {
         throw 'The alertSeverity value is required. Use Informational, Low, Medium or High.'
     }
 
@@ -90,20 +81,20 @@ function ConvertFrom-CustomDetectionYamlToJson {
     }
 
     $recommendedActions = Get-YamlValue -Key 'alertRecommendedAction'
-    if (Test-HasValue $recommendedActions) {
+    if (Test-CustomDetectionValue $recommendedActions) {
         $alertTemplate.recommendedActions = $recommendedActions
     }
 
     $tacticsInput = Get-YamlValue -Key 'tactics'
     $category = Get-YamlValue -Key 'alertCategory'
     $techniques = Get-YamlValue -Key 'mitreTechniques'
-    if ((Test-HasValue $tacticsInput) -and ((Test-HasValue $category) -or (Test-HasValue $techniques))) {
+    if ((Test-CustomDetectionValue $tacticsInput) -and ((Test-CustomDetectionValue $category) -or (Test-CustomDetectionValue $techniques))) {
         Write-Verbose 'Both tactics and alertCategory/mitreTechniques are present. Using tactics.'
     }
     $tactics = @()
-    if (Test-HasValue $tacticsInput) {
+    if (Test-CustomDetectionValue $tacticsInput) {
         $tactics = @(ConvertTo-CustomDetectionTactics -Tactics $tacticsInput)
-    } elseif (Test-HasValue $category) {
+    } elseif (Test-CustomDetectionValue $category) {
         $tactics = @(ConvertTo-CustomDetectionTactics -Category "$category" -Techniques @($techniques))
     }
     if ($tactics.Count -eq 0) {
@@ -117,12 +108,12 @@ function ConvertFrom-CustomDetectionYamlToJson {
     $entityMappingsInput = Get-YamlValue -Key 'entityMappings'
     $impactedEntities = Get-YamlValue -Key 'impactedEntities'
     $entityMappings = $null
-    if (Test-HasValue $entityMappingsInput) {
-        if (Test-HasValue $impactedEntities) {
+    if (Test-CustomDetectionValue $entityMappingsInput) {
+        if (Test-CustomDetectionValue $impactedEntities) {
             Write-Verbose 'Both entityMappings and impactedEntities are present. Using entityMappings.'
         }
         $entityMappings = ConvertTo-CustomDetectionEntityMappings -EntityMappings $entityMappingsInput -SkipIdentifierValidation:$SkipIdentifierValidation
-    } elseif (Test-HasValue $impactedEntities) {
+    } elseif (Test-CustomDetectionValue $impactedEntities) {
         $entityMappings = ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @($impactedEntities) -SkipIdentifierValidation:$SkipIdentifierValidation
     }
     if ($entityMappings) {
@@ -146,7 +137,7 @@ function ConvertFrom-CustomDetectionYamlToJson {
     }
 
     $scope = Get-YamlValue -Key 'organizationalScope'
-    if (Test-HasValue $scope) {
+    if (Test-CustomDetectionValue $scope) {
         $deviceGroups = @($scope | ForEach-Object { "$_" })
         if (@($deviceGroups | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
             throw 'organizationalScope contains an empty device group name.'
@@ -157,7 +148,7 @@ function ConvertFrom-CustomDetectionYamlToJson {
     }
 
     $actions = Get-YamlValue -Key 'actions'
-    if (Test-HasValue $actions) {
+    if (Test-CustomDetectionValue $actions) {
         $automatedActions = ConvertTo-CustomDetectionAutomatedActions -Actions @($actions)
         if ($automatedActions) {
             $detectionAction.automatedActions = $automatedActions
@@ -172,7 +163,7 @@ function ConvertFrom-CustomDetectionYamlToJson {
     $jsonObj.status = $status
 
     $description = Get-YamlValue -Key 'description'
-    if (Test-HasValue $description) {
+    if (Test-CustomDetectionValue $description) {
         $jsonObj.description = $description
     }
 
