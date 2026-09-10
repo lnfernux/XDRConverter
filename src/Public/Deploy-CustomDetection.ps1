@@ -288,7 +288,7 @@ function Deploy-CustomDetection {
                 $byName = Get-CustomDetectionIds | Where-Object { $_.DisplayName -eq $jsonObj.displayName } | Select-Object -First 1
                 if ($byName) {
                     $existingRuleId = $byName.Id
-                    Write-Verbose "Found matching detection by display name: Rule Id '$existingRuleId'."
+                    Write-Warning "Rule '$($jsonObj.displayName)' was matched by its display name alone. Without the tag a renamed file creates a new rule and leaves this one behind."
                 }
             }
             # The list can lag behind a create or a delete, so the client id is asked for directly before a create

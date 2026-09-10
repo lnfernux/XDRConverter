@@ -482,10 +482,11 @@ queryText: DeviceEvents
             $tempFile = Join-Path TestDrive: 'body-notag.yaml'
             $testYaml | Out-File -FilePath $tempFile -Encoding UTF8
 
-            $result = Deploy-CustomDetection -InputFile $tempFile -NoDescriptionTag -Confirm:$false
+            $result = Deploy-CustomDetection -InputFile $tempFile -NoDescriptionTag -Confirm:$false -WarningVariable w -WarningAction SilentlyContinue
             $result.Action | Should -Be 'Updated'
             $result.RuleId | Should -Be '77'
             $script:CapturedMethod | Should -Be 'PATCH'
+            "$w" | Should -Match 'display name'
         }
 
         It 'Should PATCH without the id property' {

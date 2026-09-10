@@ -217,18 +217,19 @@ Describe 'Get-CustomDetectionIds' {
             }
         }
 
-        It 'Should not restrict the projection, so detectorId survives while the API returns it' {
+        It 'Should project the id, the display name and the detection action only' {
             Get-CustomDetectionIds | Out-Null
-            $script:CapturedUri | Should -Not -Match '\$select'
+            $script:CapturedUri | Should -Match '\$select=id,displayName,detectionAction'
+            $script:CapturedUri | Should -Not -Match 'detectorId'
         }
 
         It 'Should carry the display name' {
             (Get-CustomDetectionIds)[0].DisplayName | Should -Be 'Rule New'
         }
 
-        It 'Should fall back to the rule id for DetectorId' {
+        It 'Should leave DetectorId empty when the API does not return it' {
             $result = Get-CustomDetectionIds
-            $result[0].DetectorId | Should -Be 'rule-new'
+            $result[0].DetectorId | Should -BeNullOrEmpty
             $result[0].DescriptionTag | Should -Be '12345678-1234-1234-1234-123456789abc'
         }
     }

@@ -5,10 +5,11 @@ function Get-CustomDetectionIds {
 
     .DESCRIPTION
         Queries Microsoft Graph API to retrieve all detection rules and returns
-        their detection rule ID, the UUID from the description tag (if present),
-        and the tag prefix (if present). The DetectorId property is kept for
-        compatibility and carries the rule ID. Results are cached for the
-        duration specified by CacheTtlMinutes (default: 60 minutes).
+        their detection rule ID, the display name, the UUID from the description
+        tag (if present), and the tag prefix (if present). The DetectorId property
+        is kept for compatibility and is empty, since the list no longer requests
+        the deprecated detector id. Results are cached for the duration specified
+        by CacheTtlMinutes (default: 60 minutes).
 
     .PARAMETER CacheTtlMinutes
         How long (in minutes) to keep the cached result before re-querying the API.
@@ -63,8 +64,8 @@ function Get-CustomDetectionIds {
         }
 
         try {
-            # Query the Microsoft Graph API with pagination support. No projection, so detectorId is kept while the API still returns it
-            $uri = 'https://graph.microsoft.com/beta/security/rules/detectionRules'
+            # Query the Microsoft Graph API with pagination support. The projection names only properties that outlive the 2026-10-01 removals
+            $uri = 'https://graph.microsoft.com/beta/security/rules/detectionRules?$select=id,displayName,detectionAction'
             $allValues = [System.Collections.Generic.List[object]]::new()
 
             do {
@@ -96,7 +97,7 @@ function Get-CustomDetectionIds {
 
                     [PSCustomObject]@{
                         Id             = $_.id
-                        DetectorId     = if ($_.detectorId) { $_.detectorId } else { $_.id }
+                        DetectorId     = $_.detectorId
                         DisplayName    = $_.displayName
                         DescriptionTag = $descriptionTag
                         TagPrefix      = $tagPrefix

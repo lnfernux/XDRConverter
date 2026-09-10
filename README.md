@@ -15,7 +15,7 @@ The XDRConverter module provides cmdlets to work with Microsoft Defender XDR cus
 | `Deploy-CustomDetection` | Deploys detection rules to Defender XDR via Microsoft Graph API |
 | `Get-CustomDetection` | Retrieves detection rules from Defender XDR |
 | `Get-CustomDetectionIds` | Lists detection rule IDs with their description tags (cached) |
-| `Get-CustomDetectionIdByDetectorId` | Looks up a detection rule ID by its guid (rule id or legacy detector ID) |
+| `Get-CustomDetectionIdByDetectorId` | Looks up a detection rule ID by its guid, with or without the `rule-` prefix |
 | `Get-CustomDetectionIdByDescriptionTag` | Looks up a detection rule ID by its description tag UUID |
 | `Remove-CustomDetection` | Removes a detection rule from Defender XDR |
 | `Test-CustomDetectionMitreTechnique` | Validates MITRE ATT&CK techniques against XDR-supported categories |
@@ -271,7 +271,7 @@ Lists detection rule IDs with their description tags and tag prefixes. Results a
 
 The output includes:
 - **Id**: The detection rule ID
-- **DetectorId**: Compatibility column. Carries the legacy detector ID while the API still returns it, otherwise the rule ID
+- **DetectorId**: Compatibility column. Empty, since the list no longer requests the deprecated detector ID
 - **DisplayName**: The rule name
 - **DescriptionTag**: The UUID extracted from the description tag (e.g., from `[PREFIX:uuid]` or `[uuid]`)
 - **TagPrefix**: The prefix text from the description tag (e.g., `PREFIX` from `[PREFIX:uuid]`, or `$null` if no prefix)
@@ -300,7 +300,7 @@ Get-CustomDetectionIds -CacheTtlMinutes 10
 
 ### Get-CustomDetectionIdByDetectorId
 
-Returns the detection rule ID for a given guid. The guid is matched against the rule ID first and against the legacy detector ID second. Uses the cached output of `Get-CustomDetectionIds`.
+Returns the detection rule ID for a given guid. The guid is matched against the rule ID in its plain and `rule-` prefixed forms. Uses the cached output of `Get-CustomDetectionIds`.
 
 #### Parameters
 
@@ -338,7 +338,7 @@ Get-CustomDetectionIdByDescriptionTag -DescriptionTag '81fb771a-c57e-41b8-9905-6
 
 ### Remove-CustomDetection
 
-Deletes a custom detection rule from Microsoft Defender XDR. The rule can be identified by its detection rule ID, by the guid from the source file (matched against the rule ID and the legacy detector ID), or by the DescriptionTag UUID appended to the alert description during deployment.
+Deletes a custom detection rule from Microsoft Defender XDR. The rule can be identified by its detection rule ID, by the guid from the source file (matched against the rule ID with or without the `rule-` prefix), or by the DescriptionTag UUID appended to the alert description during deployment.
 
 #### Parameters
 
@@ -553,7 +553,9 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - `ConvertTo-CustomDetectionYaml -LegacyKeys` emits the legacy YAML keys for files that must stay in the old form. Column mappings the legacy identifiers cannot express are dropped with a warning
 - The legacy entity types IP, URL, FileHash, Process, RegistryKey and RegistryValue now deploy. Version 1.4.1 turned them into impactedAsset types the API does not have
 - With `-NoDescriptionTag`, an existing rule is found through its display name, which the API keeps unique
-- `Get-CustomDetectionIds` carries the display name and no longer projects the list, so the legacy detector id stays available while the API returns it
+- `Get-CustomDetectionIds` carries the display name. The list is projected to the id, the display name and the detection action, so `DetectorId` is empty and the request keeps working after the deprecated properties are removed
+- With `-NoDescriptionTag`, a rule matched by its display name produces a warning, since a renamed file would create a new rule
+- A rule the platform set to `autoDisabled` is left alone with a warning until the file changes or `-Force` is used
 - A file action that names both hash columns is rejected before the request
 - An action field the Graph action type does not document is rejected before the request
 - OData annotations on entity mappings and automated actions are ignored

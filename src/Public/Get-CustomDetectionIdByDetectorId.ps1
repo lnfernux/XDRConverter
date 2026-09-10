@@ -4,12 +4,12 @@ function Get-CustomDetectionIdByDetectorId {
         Gets the detection rule ID by its guid.
 
     .DESCRIPTION
-        Looks up a detection rule whose rule ID equals the given guid. Rules
-        created before the guid was used as the rule ID are matched on their
-        legacy detector ID while the API still returns it.
+        Looks up a detection rule whose rule ID equals the given guid, with or
+        without the rule prefix. The name is kept for compatibility. The legacy
+        detector ID is no longer requested from the API.
 
     .PARAMETER DetectorId
-        The guid to look up. Matched against the rule ID and the legacy detector ID.
+        The guid to look up. Matched against the rule ID in its plain and rule-prefixed forms.
 
     .EXAMPLE
         Get-CustomDetectionIdByDetectorId -DetectorId "81fb771a-c57e-41b8-9905-63dbf267c13f"
@@ -37,8 +37,8 @@ function Get-CustomDetectionIdByDetectorId {
             # Leverage the cached detection IDs list
             $detectionIds = Get-CustomDetectionIds
 
-            # Match the rule id first, in its plain and rule-prefixed forms, then the legacy detector id
-            $detectionRule = $detectionIds | Where-Object { $_.Id -eq $DetectorId -or $_.Id -eq "rule-$DetectorId" -or $_.DetectorId -eq $DetectorId } | Select-Object -First 1
+            # Match the rule id in its plain and rule-prefixed forms
+            $detectionRule = $detectionIds | Where-Object { $_.Id -eq $DetectorId -or $_.Id -eq "rule-$DetectorId" } | Select-Object -First 1
 
             if ($detectionRule) {
                 return $detectionRule.Id

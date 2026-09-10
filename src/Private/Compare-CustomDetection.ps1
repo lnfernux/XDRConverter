@@ -36,6 +36,12 @@ function Compare-CustomDetection {
             continue
         }
 
+        # The platform sets autoDisabled when the query keeps failing. Enabling it again without a change would only repeat the failure
+        if ($key -eq 'status' -and $remoteValue -eq 'autoDisabled' -and $localValue -eq 'enabled') {
+            Write-Warning 'The rule is autoDisabled in the tenant. Change the file or use -Force to enable it again.'
+            continue
+        }
+
         # A description or recommended action the file does not set stays on the rule. The update omits the property, so reporting it would repeat on every run
         if ($key -in @('description', 'recommendedActions') -and $localValue -eq '' -and $remoteValue -ne '') {
             Write-Verbose "The rule carries a $key that the file does not set. It is left unchanged."

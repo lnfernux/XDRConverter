@@ -218,6 +218,26 @@ Describe 'Compare-CustomDetection' {
         }
     }
 
+    It 'Treats a remote autoDisabled status as no change and warns' {
+        $local = New-LocalBody
+        $remote = New-RemoteRule
+        $remote.status = 'autoDisabled'
+        InModuleScope XDRConverter -Parameters @{ Local = $local; Remote = $remote } {
+            $result = Compare-CustomDetection -Local $Local -Remote $Remote -WarningVariable w -WarningAction SilentlyContinue
+            $result | Should -Be $false
+            "$w" | Should -Match 'autoDisabled'
+        }
+    }
+
+    It 'Still reports a change when the file disables an autoDisabled rule' {
+        $local = New-LocalBody -Overrides @{ status = 'disabled' }
+        $remote = New-RemoteRule
+        $remote.status = 'autoDisabled'
+        InModuleScope XDRConverter -Parameters @{ Local = $local; Remote = $remote } {
+            Compare-CustomDetection -Local $Local -Remote $Remote -WarningAction SilentlyContinue | Should -Be $true
+        }
+    }
+
     It 'Still reports a change when customDetails differ on both sides' {
         $local = New-LocalBody -Overrides @{ 'detectionAction.alertTemplate.customDetails' = @{ CommandLine = 'Other' } }
         $remote = New-RemoteRule
