@@ -998,6 +998,18 @@ Describe 'CustomDetection mapping helpers' {
 
     Context 'ConvertTo-CustomDetectionAutomatedActions hash columns' {
 
+        It 'Writes an additional field under its documented name whatever the casing in the file' {
+            InModuleScope XDRConverter {
+                $result = ConvertTo-CustomDetectionAutomatedActions -Actions @(
+                    @{ actionType = 'BlockFile'; additionalFields = [ordered]@{ Sha256Column = 'SHA256'; DeviceGroupNames = @('Servers') } },
+                    @{ actionType = 'RunAntivirusScan'; additionalFields = @{ DeviceIdColumn = 'TargetDeviceId' } }
+                )
+                @($result.blockFiles[0].Keys) | Should -BeExactly @('sha256Column', 'deviceGroupNames')
+                @($result.runAntivirusScans[0].Keys) | Should -BeExactly @('deviceIdColumn')
+                $result.runAntivirusScans[0].deviceIdColumn | Should -Be 'TargetDeviceId'
+            }
+        }
+
         It 'Rejects a file action that names both hash columns' {
             InModuleScope XDRConverter {
                 { ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = 'BlockFile'; additionalFields = @{ sha1Column = 'SHA1'; sha256Column = 'SHA256' } }) } | Should -Throw '*one hash column*'

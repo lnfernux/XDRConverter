@@ -63,14 +63,18 @@ function ConvertTo-CustomDetectionAutomatedActions {
 
         $additional = ConvertTo-CustomDetectionHashtable -InputObject $map['additionalFields']
         if ($additional) {
+            # Fields are matched without case and written under their documented name
+            $fields = [ordered]@{}
             foreach ($key in @($additional.Keys)) {
                 if ("$key".StartsWith('@')) { continue }
-                if ($key -notin $entry.Fields) {
+                $field = @($entry.Fields | Where-Object { $_ -eq $key })
+                if ($field.Count -eq 0) {
                     throw "Field '$key' is not documented for action '$actionType'. Documented fields are: $($entry.Fields -join ', ')"
                 }
+                $fields[$field[0]] = $additional[$key]
             }
-            $hasSha1 = $additional.Contains('sha1Column') -and "$($additional['sha1Column'])" -ne ''
-            $hasSha256 = $additional.Contains('sha256Column') -and "$($additional['sha256Column'])" -ne ''
+            $hasSha1 = $fields.Contains('sha1Column') -and "$($fields['sha1Column'])" -ne ''
+            $hasSha256 = $fields.Contains('sha256Column') -and "$($fields['sha256Column'])" -ne ''
             if ($hasSha1 -and $hasSha256) {
                 throw "Action '$actionType' names sha1Column and sha256Column. A file action carries one hash column."
             }
@@ -78,8 +82,8 @@ function ConvertTo-CustomDetectionAutomatedActions {
             if ($hasSha256 -and -not $hasSha1 -and $item.Contains('sha1Column')) {
                 $item.Remove('sha1Column')
             }
-            foreach ($key in @($additional.Keys)) {
-                $value = $additional[$key]
+            foreach ($key in @($fields.Keys)) {
+                $value = $fields[$key]
                 if ($null -eq $value -or "$value" -eq '') { continue }
                 if ($key -eq 'isolationType') {
                     $isolationType = "$value".ToLowerInvariant()
