@@ -159,6 +159,38 @@ Describe 'Compare-CustomDetection' {
         }
     }
 
+    It 'Keeps a remote <Name> the file does not set without reporting a change' -ForEach @(
+        @{ Name = 'description'; Path = 'description' }
+        @{ Name = 'recommended action'; Path = 'detectionAction.alertTemplate.recommendedActions' }
+    ) {
+        $local = New-LocalBody
+        $remote = New-RemoteRule
+        if ($Path -eq 'description') {
+            $remote | Add-Member -NotePropertyName description -NotePropertyValue 'Set in the portal'
+        } else {
+            $remote.detectionAction.alertTemplate.recommendedActions = 'Set in the portal'
+        }
+        InModuleScope XDRConverter -Parameters @{ Local = $local; Remote = $remote } {
+            Compare-CustomDetection -Local $Local -Remote $Remote -WarningAction SilentlyContinue | Should -Be $false
+        }
+    }
+
+    It 'Still reports a change when the file sets a different <Name>' -ForEach @(
+        @{ Name = 'description'; Path = 'description' }
+        @{ Name = 'recommended action'; Path = 'detectionAction.alertTemplate.recommendedActions' }
+    ) {
+        $local = New-LocalBody -Overrides @{ $Path = 'From the file' }
+        $remote = New-RemoteRule
+        if ($Path -eq 'description') {
+            $remote | Add-Member -NotePropertyName description -NotePropertyValue 'Set in the portal'
+        } else {
+            $remote.detectionAction.alertTemplate.recommendedActions = 'Set in the portal'
+        }
+        InModuleScope XDRConverter -Parameters @{ Local = $local; Remote = $remote } {
+            Compare-CustomDetection -Local $Local -Remote $Remote | Should -Be $true
+        }
+    }
+
     It 'Still reports a change when customDetails differ on both sides' {
         $local = New-LocalBody -Overrides @{ 'detectionAction.alertTemplate.customDetails' = @{ CommandLine = 'Other' } }
         $remote = New-RemoteRule

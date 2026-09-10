@@ -375,14 +375,14 @@ The Graph API deprecated several `detectionRule` properties and removes them on 
 | --- | --- | --- | --- |
 | guid | Yes | `id` | Kept as `id` in the converted JSON and used as the description tag. Sent on create as `rule-<guid>`. Not required by the API in live testing, whatever the reference says. `id` is accepted as an alias |
 | ruleName | Yes | `displayName` | |
-| description | No | `description` | Rule description shown in the portal rule list |
+| description | No | `description` | Rule description shown in the portal rule list. A value the file does not set is left unchanged on the rule |
 | status | No | `status` | `enabled`, `disabled` or `autoDisabled`. Wins over `isEnabled` |
 | isEnabled | No | `status` | Legacy. `true` becomes `enabled`, `false` becomes `disabled`. Defaults to enabled |
 | frequency | Yes | `schedule.frequency` | ISO 8601 duration of days, hours, minutes and seconds. Normalised to the form the API stores, so `PT1440M` and `P1DT0H` become `P1D` and `PT90M` becomes `PT1H30M`. Weeks, months and years are rejected. Legacy tokens `0`, `1H`, `3H`, `12H`, `24H` are translated |
 | alertTitle | Yes | `detectionAction.alertTemplate.title` | |
 | alertSeverity | Yes | `detectionAction.alertTemplate.severity` | |
 | alertDescription | Yes | `detectionAction.alertTemplate.description` | The description tag is appended on deploy |
-| alertRecommendedAction | No | `detectionAction.alertTemplate.recommendedActions` | |
+| alertRecommendedAction | No | `detectionAction.alertTemplate.recommendedActions` | A value the file does not set is left unchanged on the rule |
 | tactics | One of | `detectionAction.alertTemplate.tactics` | One `{ tactic, techniques }` entry. The API rejects more than one tactic per rule. Techniques may be plain ids or `{ technique, subTechniques }`. Wins over `alertCategory` and `mitreTechniques` |
 | alertCategory | One of | `detectionAction.alertTemplate.tactics[0].tactic` | Legacy. Becomes the single tactic |
 | mitreTechniques | No | `detectionAction.alertTemplate.tactics[0].techniques` | Legacy flat list. Sub-techniques are grouped under their parent technique |
@@ -560,6 +560,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - Request bodies are stripped of PowerShell object wrappers before they reach the Graph client, which rejected them with a self-referencing loop error
 - Updates name every action and entity mapping collection, so an action or entity removed from the file is removed from the rule
 - `frequency` is normalised to the form the API stores before the change detection runs, so a value such as `PT1440M` no longer reports an update on every run
+- A rule description or recommended action the file does not set is left unchanged and no longer reports an update on every run
 - Bugs/issues or undocumented behavior identified while testing: 
    - `PT0S` and non-MITRE tactic names such as `SuspiciousActivity` are accepted on create
    - `autoDisabled` is rejected on write and is sent as `disabled`

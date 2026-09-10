@@ -33,6 +33,12 @@ function Compare-CustomDetection {
             continue
         }
 
+        # A description or recommended action the file does not set stays on the rule. The update omits the property, so reporting it would repeat on every run
+        if ($key -in @('description', 'recommendedActions') -and $localValue -eq '' -and $remoteValue -ne '') {
+            Write-Verbose "The rule carries a $key that the file does not set. It is left unchanged."
+            continue
+        }
+
         if ($localValue -ne $remoteValue) {
             Write-Verbose "Difference found on '$key': local='$localValue' remote='$remoteValue'"
             return $true
