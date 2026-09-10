@@ -560,7 +560,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - An action field the Graph action type does not document is rejected before the request
 - OData annotations on entity mappings and automated actions are ignored
 - Request bodies are stripped of PowerShell object wrappers before they reach the Graph client, which rejected them with a self-referencing loop error
-- Updates name every action and entity mapping collection, so an action or entity removed from the file is removed from the rule
+- Updates send an empty list for every collection the rule carries and the file does not, collections this module does not know included, so an action, entity mapping or device group removed from the file is removed from the rule
 - `frequency` is normalised to the form the API stores before the change detection runs, so a value such as `PT1440M` no longer reports an update on every run
 - A rule description or recommended action the file does not set is left unchanged and no longer reports an update on every run
 - Change detection is case-sensitive for text and column names, so a casing fix to a query or a column mapping now reaches the rule. Status, severity, tactic names and device group names are still compared without case

@@ -5,19 +5,74 @@ function Complete-CustomDetectionPatchBody {
 
     .DESCRIPTION
         The API keeps any collection that a PATCH omits, so an action, entity
-        mapping, device group or custom detail removed from the YAML file would
-        stay live. The PATCH body therefore names every automated action and
-        entity mapping collection, sending an empty list for the unused ones,
-        and sends empty device groups when none are set. Custom details are
-        left out when unset because the API offers no way to clear them.
-        The rule id is left out because it cannot change.
+        mapping or device group removed from the file would stay live. The
+        PATCH body therefore sends an empty list for every collection the
+        remote rule carries and the file does not, including collections this
+        module does not know. Collections neither side carries are left out.
+        Custom details are left out when unset because the API offers no way
+        to clear them. The rule id is left out because it cannot change.
+        Without a remote rule every known collection is named, which is the
+        shape that predates the remote-driven one.
     #>
     [CmdletBinding()]
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
     param(
         [Parameter(Mandatory)]
-        [System.Collections.IDictionary]$Body
+        [System.Collections.IDictionary]$Body,
+
+        [Parameter()]
+        [AllowNull()]
+        [PSObject]$Remote
     )
+
+    function Get-Value {
+        param([object]$Object, [string]$Path)
+        $current = $Object
+        foreach ($segment in $Path.Split('.')) {
+            if ($null -eq $current) { return $null }
+            $map = ConvertTo-CustomDetectionHashtable -InputObject $current
+            if ($null -eq $map) { return $null }
+            if (-not $map.Contains($segment)) { return $null }
+            $current = $map[$segment]
+        }
+        return $current
+    }
+
+    # Collections the remote rule carries with at least one item, annotations excluded
+    function Get-RemoteCollectionList {
+        param([object]$Source)
+        $names = [System.Collections.Generic.List[string]]::new()
+        $map = ConvertTo-CustomDetectionHashtable -InputObject $Source
+        if ($null -eq $map) { return $names }
+        foreach ($key in $map.Keys) {
+            if ("$key".StartsWith('@')) { continue }
+            if ($null -ne $map[$key] -and @($map[$key]).Count -gt 0) { $names.Add([string]$key) }
+        }
+        return $names
+    }
+
+    function Merge-CollectionSet {
+        param([System.Collections.IDictionary]$Local, [string[]]$Known, [object]$RemoteSource)
+
+        $merged = [ordered]@{}
+        $names = [System.Collections.Generic.List[string]]::new()
+        if ($null -ne $Remote) {
+            foreach ($name in (Get-RemoteCollectionList -Source $RemoteSource)) { $names.Add($name) }
+        } else {
+            foreach ($name in $Known) { $names.Add($name) }
+        }
+        if ($Local) {
+            foreach ($name in $Local.Keys) { if (-not $names.Contains([string]$name)) { $names.Add([string]$name) } }
+        }
+        foreach ($name in $names) {
+            if ($Local -and $Local.Contains($name) -and $null -ne $Local[$name]) {
+                $merged[$name] = [object[]]@($Local[$name])
+            } else {
+                $merged[$name] = [object[]]@()
+            }
+        }
+        return $merged
+    }
 
     $patch = [ordered]@{}
     foreach ($key in $Body.Keys) {
@@ -36,31 +91,33 @@ function Complete-CustomDetectionPatchBody {
     }
     $detectionAction['alertTemplate'] = $alertTemplate
 
-    $entityMappings = [ordered]@{}
-    $existingMappings = $alertTemplate['entityMappings']
-    foreach ($collection in (Get-CustomDetectionEntityMappingColumns).Keys) {
-        if ($existingMappings -and $existingMappings.Contains($collection) -and $null -ne $existingMappings[$collection]) {
-            $entityMappings[$collection] = [object[]]@($existingMappings[$collection])
-        } else {
-            $entityMappings[$collection] = [object[]]@()
-        }
+    $entityMappings = Merge-CollectionSet -Local $alertTemplate['entityMappings'] -Known @((Get-CustomDetectionEntityMappingColumns).Keys) -RemoteSource (Get-Value -Object $Remote -Path 'detectionAction.alertTemplate.entityMappings')
+    if ($entityMappings.Count -gt 0) {
+        $alertTemplate['entityMappings'] = $entityMappings
+    } else {
+        $alertTemplate.Remove('entityMappings')
     }
-    $alertTemplate['entityMappings'] = $entityMappings
 
-    $automatedActions = [ordered]@{}
-    $existingActions = $detectionAction['automatedActions']
-    foreach ($entry in Get-CustomDetectionActionMap) {
-        $collection = $entry.Collection
-        if ($existingActions -and $existingActions.Contains($collection) -and $null -ne $existingActions[$collection]) {
-            $automatedActions[$collection] = [object[]]@($existingActions[$collection])
-        } else {
-            $automatedActions[$collection] = [object[]]@()
-        }
+    $automatedActions = Merge-CollectionSet -Local $detectionAction['automatedActions'] -Known @((Get-CustomDetectionActionMap).Collection) -RemoteSource (Get-Value -Object $Remote -Path 'detectionAction.automatedActions')
+    if ($automatedActions.Count -gt 0) {
+        $detectionAction['automatedActions'] = $automatedActions
+    } else {
+        $detectionAction.Remove('automatedActions')
     }
-    $detectionAction['automatedActions'] = $automatedActions
 
     if (-not $detectionAction.Contains('organizationalScope') -or $null -eq $detectionAction['organizationalScope']) {
-        $detectionAction['organizationalScope'] = [ordered]@{ deviceGroups = [object[]]@() }
+        $remoteScope = ConvertTo-CustomDetectionHashtable -InputObject (Get-Value -Object $Remote -Path 'detectionAction.organizationalScope')
+        $remoteHasGroups = $false
+        if ($null -ne $remoteScope) {
+            foreach ($key in @('deviceGroups', 'scopeNames')) {
+                if ($remoteScope.Contains($key) -and $null -ne $remoteScope[$key] -and @($remoteScope[$key]).Count -gt 0) { $remoteHasGroups = $true }
+            }
+        }
+        if ($null -eq $Remote -or $remoteHasGroups) {
+            $detectionAction['organizationalScope'] = [ordered]@{ deviceGroups = [object[]]@() }
+        } else {
+            $detectionAction.Remove('organizationalScope')
+        }
     }
 
     return $patch

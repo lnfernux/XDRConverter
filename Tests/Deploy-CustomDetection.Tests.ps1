@@ -497,7 +497,11 @@ queryText: DeviceEvents
                     id              = '48'
                     displayName     = 'OLD'
                     status          = 'enabled'
-                    detectionAction = @{ alertTemplate = @{ title = 'Old'; description = "Old [$guid]"; severity = 'low'; tactics = @(@{ tactic = 'DefenseEvasion' }) } }
+                    detectionAction = @{
+                        alertTemplate       = @{ title = 'Old'; description = "Old [$guid]"; severity = 'low'; tactics = @(@{ tactic = 'DefenseEvasion' }); entityMappings = @{ hosts = @(@{ deviceIdColumn = 'DeviceId' }); accounts = $null } }
+                        automatedActions    = @{ isolateDevices = @(@{ deviceIdColumn = 'DeviceId'; isolationType = 'full' }); allowFiles = $null }
+                        organizationalScope = @{ deviceGroups = @('Servers') }
+                    }
                     queryCondition  = @{ queryText = 'DeviceEvents' }
                     schedule        = @{ frequency = 'PT1H' }
                 }
@@ -523,10 +527,11 @@ queryText: DeviceEvents
             $script:CapturedBody.Keys | Should -Not -Contain 'id'
             $script:CapturedBody.displayName | Should -Be 'BODY-Patch'
 
-            # Every collection is present on PATCH so a removed action or entity is cleared server-side
-            @($script:CapturedBody.detectionAction.automatedActions.Keys).Count | Should -Be 16
+            # A collection the remote rule carries and the file does not is sent empty, so it is cleared server-side
+            @($script:CapturedBody.detectionAction.automatedActions.Keys) | Should -Be @('isolateDevices')
             @($script:CapturedBody.detectionAction.automatedActions.isolateDevices).Count | Should -Be 0
-            @($script:CapturedBody.detectionAction.alertTemplate.entityMappings.Keys).Count | Should -Be 17
+            @($script:CapturedBody.detectionAction.alertTemplate.entityMappings.Keys) | Should -Be @('hosts')
+            @($script:CapturedBody.detectionAction.alertTemplate.entityMappings.hosts).Count | Should -Be 0
             @($script:CapturedBody.detectionAction.organizationalScope.deviceGroups).Count | Should -Be 0
         }
 

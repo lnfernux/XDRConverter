@@ -339,7 +339,7 @@ function Deploy-CustomDetection {
                 # Update existing rule via PATCH
                 if ($PSCmdlet.ShouldProcess("Rule '$ruleName' (Id: $existingRuleId)", 'Update detection rule')) {
                     $uri = "$baseUri/$existingRuleId"
-                    $patchBody = Complete-CustomDetectionPatchBody -Body $jsonObj
+                    $patchBody = Complete-CustomDetectionPatchBody -Body $jsonObj -Remote $existingRule
                     Invoke-MgGraphRequestWithRetry -Method PATCH -Uri $uri -Body $patchBody | Out-Null
                     Write-Verbose "Updated rule '$ruleName' (Id: $existingRuleId)."
 

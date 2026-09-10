@@ -882,6 +882,68 @@ Describe 'CustomDetection mapping helpers' {
             }
         }
 
+        It 'Sends an empty list only for the collections the remote rule carries' {
+            InModuleScope XDRConverter {
+                $body = [ordered]@{
+                    id = 'x'; displayName = 'r'; status = 'enabled'
+                    queryCondition = [ordered]@{ queryText = 'q' }; schedule = [ordered]@{ frequency = 'PT1H' }
+                    detectionAction = [ordered]@{
+                        alertTemplate = [ordered]@{ title = 't'; description = 'd'; severity = 'low'; tactics = @([ordered]@{ tactic = 'Execution' }); entityMappings = [ordered]@{ hosts = @([ordered]@{ deviceIdColumn = 'DeviceId' }) } }
+                    }
+                }
+                $remote = [PSCustomObject]@{
+                    detectionAction = [PSCustomObject]@{
+                        alertTemplate       = [PSCustomObject]@{ entityMappings = [PSCustomObject]@{ hosts = @([PSCustomObject]@{ deviceIdColumn = 'DeviceId' }); accounts = @([PSCustomObject]@{ sidColumn = 'AccountSid' }); files = $null } }
+                        automatedActions    = [PSCustomObject]@{ isolateDevices = @([PSCustomObject]@{ deviceIdColumn = 'DeviceId'; isolationType = 'full' }); allowFiles = $null; blockFiles = @() }
+                        organizationalScope = [PSCustomObject]@{ deviceGroups = @('Servers'); scopeNames = @('Servers') }
+                    }
+                }
+                $patch = Complete-CustomDetectionPatchBody -Body $body -Remote $remote
+
+                @($patch.detectionAction.automatedActions.Keys) | Should -Be @('isolateDevices')
+                @($patch.detectionAction.automatedActions.isolateDevices).Count | Should -Be 0
+                @($patch.detectionAction.alertTemplate.entityMappings.Keys | Sort-Object) | Should -Be @('accounts', 'hosts')
+                @($patch.detectionAction.alertTemplate.entityMappings.accounts).Count | Should -Be 0
+                $patch.detectionAction.alertTemplate.entityMappings.hosts[0].deviceIdColumn | Should -Be 'DeviceId'
+                @($patch.detectionAction.organizationalScope.deviceGroups).Count | Should -Be 0
+            }
+        }
+
+        It 'Clears a collection the module does not know when the remote rule carries it' {
+            InModuleScope XDRConverter {
+                $body = [ordered]@{
+                    id = 'x'; displayName = 'r'; status = 'enabled'
+                    queryCondition = [ordered]@{ queryText = 'q' }; schedule = [ordered]@{ frequency = 'PT1H' }
+                    detectionAction = [ordered]@{ alertTemplate = [ordered]@{ title = 't'; description = 'd'; severity = 'low'; tactics = @([ordered]@{ tactic = 'Execution' }) } }
+                }
+                $remote = [PSCustomObject]@{
+                    detectionAction = [PSCustomObject]@{
+                        alertTemplate    = [PSCustomObject]@{ entityMappings = [PSCustomObject]@{ '@odata.type' = 'x'; futureThings = @([PSCustomObject]@{ nameColumn = 'X' }) } }
+                        automatedActions = [PSCustomObject]@{ futureActions = @([PSCustomObject]@{ deviceIdColumn = 'DeviceId' }) }
+                    }
+                }
+                $patch = Complete-CustomDetectionPatchBody -Body $body -Remote $remote
+                @($patch.detectionAction.automatedActions.Keys) | Should -Be @('futureActions')
+                @($patch.detectionAction.alertTemplate.entityMappings.Keys) | Should -Be @('futureThings')
+                $patch.detectionAction.Keys | Should -Not -Contain 'organizationalScope'
+            }
+        }
+
+        It 'Omits the collections and the scope when neither side carries them' {
+            InModuleScope XDRConverter {
+                $body = [ordered]@{
+                    id = 'x'; displayName = 'r'; status = 'enabled'
+                    queryCondition = [ordered]@{ queryText = 'q' }; schedule = [ordered]@{ frequency = 'PT1H' }
+                    detectionAction = [ordered]@{ alertTemplate = [ordered]@{ title = 't'; description = 'd'; severity = 'low'; tactics = @([ordered]@{ tactic = 'Execution' }) } }
+                }
+                $remote = [PSCustomObject]@{ detectionAction = [PSCustomObject]@{ alertTemplate = [PSCustomObject]@{ entityMappings = $null }; automatedActions = $null; organizationalScope = $null } }
+                $patch = Complete-CustomDetectionPatchBody -Body $body -Remote $remote
+                $patch.detectionAction.Keys | Should -Not -Contain 'automatedActions'
+                $patch.detectionAction.alertTemplate.Keys | Should -Not -Contain 'entityMappings'
+                $patch.detectionAction.Keys | Should -Not -Contain 'organizationalScope'
+            }
+        }
+
         It 'Keeps populated scope and custom details' {
             InModuleScope XDRConverter {
                 $body = [ordered]@{
