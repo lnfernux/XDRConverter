@@ -646,6 +646,94 @@ queryText: DeviceEvents
             $script:CapturedBody.detectionAction.alertTemplate.Keys | Should -Not -Contain 'entityMappings'
         }
 
+        It 'Should leave an autoDisabled rule alone and warn when the file is otherwise unchanged' {
+            $guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'
+            Mock Get-CustomDetectionIdByDetectorId { return '48' } -ModuleName XDRConverter
+            Mock Get-CustomDetection {
+                return @{
+                    id              = '48'
+                    displayName     = 'AUTO'
+                    isEnabled       = $false
+                    status          = 'autoDisabled'
+                    detectionAction = @{
+                        alertTemplate = @{
+                            title       = 'Test'
+                            description = "Test [$guid]"
+                            severity    = 'medium'
+                            tactics     = @(@{ tactic = 'DefenseEvasion' })
+                        }
+                    }
+                    queryCondition  = @{ queryText = 'DeviceEvents' }
+                    schedule        = @{ frequency = 'PT1H' }
+                }
+            } -ModuleName XDRConverter
+            Mock Invoke-MgGraphRequest { $script:ForceMethod = $Method; $script:ForceBody = $Body } -ModuleName XDRConverter
+
+            $testYaml = @"
+guid: $guid
+ruleName: AUTO
+isEnabled: true
+alertTitle: Test
+frequency: 1H
+alertSeverity: Medium
+alertDescription: Test
+alertCategory: DefenseEvasion
+queryText: DeviceEvents
+"@
+            $tempFile = Join-Path TestDrive: 'auto-disabled.yaml'
+            $testYaml | Out-File -FilePath $tempFile -Encoding UTF8
+
+            $result = Deploy-CustomDetection -InputFile $tempFile -Confirm:$false -WarningVariable warning -WarningAction SilentlyContinue
+            $result.Action | Should -Be 'Skipped'
+            "$warning" | Should -Match 'autoDisabled'
+            Should -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -Times 0 -Exactly -ParameterFilter { $Method -eq 'PATCH' }
+        }
+
+        It 'Should enable an autoDisabled rule again with -Force' {
+            $guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'
+            $script:ForceMethod = $null
+            $script:ForceBody = $null
+            Mock Get-CustomDetectionIdByDetectorId { return '48' } -ModuleName XDRConverter
+            Mock Get-CustomDetection {
+                return @{
+                    id              = '48'
+                    displayName     = 'AUTO'
+                    isEnabled       = $false
+                    status          = 'autoDisabled'
+                    detectionAction = @{
+                        alertTemplate = @{
+                            title       = 'Test'
+                            description = "Test [$guid]"
+                            severity    = 'medium'
+                            tactics     = @(@{ tactic = 'DefenseEvasion' })
+                        }
+                    }
+                    queryCondition  = @{ queryText = 'DeviceEvents' }
+                    schedule        = @{ frequency = 'PT1H' }
+                }
+            } -ModuleName XDRConverter
+            Mock Invoke-MgGraphRequest { $script:ForceMethod = $Method; $script:ForceBody = $Body } -ModuleName XDRConverter
+
+            $testYaml = @"
+guid: $guid
+ruleName: AUTO
+isEnabled: true
+alertTitle: Test
+frequency: 1H
+alertSeverity: Medium
+alertDescription: Test
+alertCategory: DefenseEvasion
+queryText: DeviceEvents
+"@
+            $tempFile = Join-Path TestDrive: 'auto-disabled-force.yaml'
+            $testYaml | Out-File -FilePath $tempFile -Encoding UTF8
+
+            $result = Deploy-CustomDetection -InputFile $tempFile -Force -Confirm:$false -WarningAction SilentlyContinue
+            $result.Action | Should -Be 'Updated'
+            $script:ForceMethod | Should -Be 'PATCH'
+            $script:ForceBody.status | Should -Be 'enabled'
+        }
+
         It 'Should skip an unchanged rule returned in the dual old-plus-new shape' {
             $guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'
             Mock Get-CustomDetectionIdByDetectorId { return '48' } -ModuleName XDRConverter
@@ -901,47 +989,27 @@ queryText: DeviceEvents
             Should -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -ParameterFilter { $Method -eq 'PATCH' }
         }
 
-        It 'Should find rule by description UUID tag when detectorId lookup fails' {
+        It 'Should update a rule that carries the guid only in its description tag' {
             $guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'
-            # Return all detections with a matching description
+            # Only the rule the tag names answers. Any other id falls through to the empty default mock
             Mock Get-CustomDetection {
-                if ($DetectionId) {
-                    return @{
-                        id              = 'found-by-desc'
-                        detectorId      = 'different-detector'
-                        displayName     = 'OLD-NAME'
-                        isEnabled       = $false
-                        detectionAction = @{
-                            alertTemplate = @{
-                                title       = 'Old Title'
-                                description = "Some desc [$guid]"
-                                severity    = 'low'
-                                category    = 'DefenseEvasion'
-                            }
+                return @{
+                    id              = 'found-by-desc'
+                    detectorId      = 'different-detector'
+                    displayName     = 'OLD-NAME'
+                    isEnabled       = $false
+                    detectionAction = @{
+                        alertTemplate = @{
+                            title       = 'Old Title'
+                            description = "Some desc [$guid]"
+                            severity    = 'low'
+                            category    = 'DefenseEvasion'
                         }
-                        queryCondition  = @{ queryText = 'DeviceEvents | old' }
-                        schedule        = @{ period = '0' }
                     }
+                    queryCondition  = @{ queryText = 'DeviceEvents | old' }
+                    schedule        = @{ period = '0' }
                 }
-                return @(
-                    @{
-                        id              = 'found-by-desc'
-                        detectorId      = 'different-detector'
-                        displayName     = 'OLD-NAME'
-                        isEnabled       = $false
-                        detectionAction = @{
-                            alertTemplate = @{
-                                title       = 'Old Title'
-                                description = "Some desc [$guid]"
-                                severity    = 'low'
-                                category    = 'DefenseEvasion'
-                            }
-                        }
-                        queryCondition  = @{ queryText = 'DeviceEvents | old' }
-                        schedule        = @{ period = '0' }
-                    }
-                )
-            } -ModuleName XDRConverter
+            } -ModuleName XDRConverter -ParameterFilter { $DetectionId -eq 'found-by-desc' }
             Mock Invoke-MgGraphRequest {} -ModuleName XDRConverter
             Mock Get-CustomDetectionIds {
                 return @(
@@ -971,6 +1039,8 @@ queryText: DeviceEvents | new
             $result = Deploy-CustomDetection -InputFile $tempFile -Confirm:$false
             $result.Action | Should -Be 'Updated'
             $result.RuleId | Should -Be 'found-by-desc'
+            Should -Invoke Get-CustomDetection -ModuleName XDRConverter -Times 0 -Exactly -ParameterFilter { $DetectionId -eq "rule-$guid" }
+            Should -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -Times 1 -Exactly -ParameterFilter { $Method -eq 'PATCH' -and $Uri -like '*/found-by-desc' }
         }
     }
 
