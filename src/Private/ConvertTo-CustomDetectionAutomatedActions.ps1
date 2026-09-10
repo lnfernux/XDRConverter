@@ -46,7 +46,9 @@ function ConvertTo-CustomDetectionAutomatedActions {
 
     foreach ($action in @($Actions)) {
         $map = ConvertTo-CustomDetectionHashtable -InputObject $action
-        if (-not $map) { continue }
+        if (-not $map) {
+            throw "Each item in actions must be a mapping with an actionType. Got '$action'."
+        }
         $actionType = "$($map['actionType'])".Trim()
         $entry = $actionMap | Where-Object { $_.ActionType -eq $actionType } | Select-Object -First 1
         if (-not $entry) {
@@ -82,8 +84,7 @@ function ConvertTo-CustomDetectionAutomatedActions {
                 if ($key -eq 'isolationType') {
                     $isolationType = "$value".ToLowerInvariant()
                     if ($isolationType -notin @('full', 'selective')) {
-                        Write-Warning "Isolation type '$value' is not supported. Defaulting to 'Full'."
-                        $isolationType = 'full'
+                        throw "Isolation type '$value' is not supported. Use 'Full' or 'Selective'."
                     }
                     $item[$key] = $isolationType
                 } elseif ($key -eq 'deviceGroupNames') {

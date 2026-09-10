@@ -17,7 +17,10 @@ function ConvertFrom-CustomDetectionEntityMappings {
 
         [Parameter(ParameterSetName = 'ImpactedAssets')]
         [AllowNull()]
-        [object[]]$ImpactedAssets
+        [object[]]$ImpactedAssets,
+
+        [Parameter(ParameterSetName = 'EntityMappings')]
+        [switch]$ValidateIdentifiers
     )
 
     if ($PSCmdlet.ParameterSetName -eq 'ImpactedAssets') {
@@ -32,12 +35,12 @@ function ConvertFrom-CustomDetectionEntityMappings {
         if ($entities.Count -eq 0) {
             return $null
         }
-        return ConvertTo-CustomDetectionEntityMappings -ImpactedEntities $entities.ToArray() -SkipIdentifierValidation -WarningAction SilentlyContinue
+        return ConvertTo-CustomDetectionEntityMappings -ImpactedEntities $entities.ToArray() -SkipIdentifierValidation
     }
 
     if ($null -eq $EntityMappings) {
         return $null
     }
 
-    return ConvertTo-CustomDetectionEntityMappings -EntityMappings $EntityMappings -SkipIdentifierValidation -WarningAction SilentlyContinue
+    return ConvertTo-CustomDetectionEntityMappings -EntityMappings $EntityMappings -SkipIdentifierValidation:(-not $ValidateIdentifiers)
 }

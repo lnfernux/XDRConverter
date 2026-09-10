@@ -198,7 +198,9 @@ Describe 'Compare-CustomDetection' {
             $remote.detectionAction.alertTemplate.recommendedActions = 'Set in the portal'
         }
         InModuleScope XDRConverter -Parameters @{ Local = $local; Remote = $remote } {
-            Compare-CustomDetection -Local $Local -Remote $Remote -WarningAction SilentlyContinue | Should -Be $false
+            $result = Compare-CustomDetection -Local $Local -Remote $Remote -WarningVariable warning -WarningAction SilentlyContinue
+            $result | Should -Be $false
+            "$warning" | Should -Match 'cannot remove'
         }
     }
 

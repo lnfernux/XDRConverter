@@ -8,11 +8,12 @@ function Complete-CustomDetectionPatchBody {
         mapping or device group removed from the file would stay live. The
         PATCH body therefore sends an empty list for every collection the
         remote rule carries and the file does not, including collections this
-        module does not know. Collections neither side carries are left out.
-        Custom details are left out when unset because the API offers no way
-        to clear them. The rule id is left out because it cannot change.
-        Without a remote rule every known collection is named, which is the
-        shape that predates the remote-driven one.
+        module does not know. Each cleared collection is named in a warning.
+        Collections neither side carries are left out. Custom details are
+        left out when unset because the API offers no way to clear them.
+        The rule id is left out because it cannot change. Without a remote
+        rule every known collection is named, which is the shape that
+        predates the remote-driven one.
     #>
     [CmdletBinding()]
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
@@ -55,6 +56,10 @@ function Complete-CustomDetectionPatchBody {
             if ($Local -and $Local.Contains($name) -and $null -ne $Local[$name]) {
                 $merged[$name] = [object[]]@($Local[$name])
             } else {
+                if ($null -ne $Remote) {
+                    $unknownNote = if ($name -notin $Known) { " (not one of this module's known columns)" } else { '' }
+                    Write-Warning "The rule carries '$name'$unknownNote that the file does not set. It is cleared."
+                }
                 $merged[$name] = [object[]]@()
             }
         }

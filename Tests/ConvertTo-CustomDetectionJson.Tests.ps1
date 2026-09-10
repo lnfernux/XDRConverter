@@ -413,10 +413,11 @@ tactics:
       - T1547.001
 "@
             $file = New-YamlFile -Name 'tactics-win.yaml' -Content $yaml
-            $result = ConvertTo-CustomDetectionJson -InputFile $file | ConvertFrom-Json
+                        $result = ConvertTo-CustomDetectionJson -InputFile $file -WarningVariable warning -WarningAction SilentlyContinue | ConvertFrom-Json
             @($result.detectionAction.alertTemplate.tactics).Count | Should -Be 1
             $result.detectionAction.alertTemplate.tactics[0].tactic | Should -Be 'Persistence'
             $result.detectionAction.alertTemplate.tactics[0].techniques[0].technique | Should -Be 'T1547'
+                        "$warning" | Should -Match 'Both tactics and alertCategory/mitreTechniques'
         }
 
         It 'Throws when more than one tactic is listed because the API accepts a single tactic' {
@@ -457,9 +458,10 @@ entityMappings:
     - sha256Column: SHA256
 "@
             $file = New-YamlFile -Name 'entity-wins.yaml' -Content $yaml
-            $result = ConvertTo-CustomDetectionJson -InputFile $file | ConvertFrom-Json
+                        $result = ConvertTo-CustomDetectionJson -InputFile $file -WarningVariable warning -WarningAction SilentlyContinue | ConvertFrom-Json
             $result.detectionAction.alertTemplate.entityMappings.PSObject.Properties.Name | Should -Be @('files')
             $result.detectionAction.alertTemplate.entityMappings.files[0].sha256Column | Should -Be 'SHA256'
+                        "$warning" | Should -Match 'Both entityMappings and impactedEntities'
         }
 
         It 'Maps a corpus-style rule with mixed-case identifiers and an empty scope' {

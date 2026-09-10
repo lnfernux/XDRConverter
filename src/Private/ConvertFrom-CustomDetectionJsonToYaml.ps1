@@ -20,7 +20,10 @@ function ConvertFrom-CustomDetectionJsonToYaml {
 
         [Parameter()]
         [ValidateSet('Informational', 'Low', 'Medium', 'High')]
-        [string]$SetSeverity
+        [string]$SetSeverity,
+
+        [Parameter()]
+        [switch]$ValidateIdentifiers
     )
 
     $DefaultSortOrderInYAML = @(
@@ -56,7 +59,7 @@ function ConvertFrom-CustomDetectionJsonToYaml {
     } elseif ($rawStatus -eq 'autoDisabled') {
         'autoDisabled'
     } else {
-        ConvertTo-CustomDetectionStatus -IsEnabled (Get-CustomDetectionValue -Object $JsonObject -Path 'isEnabled') -Status $rawStatus -WarningAction SilentlyContinue
+        ConvertTo-CustomDetectionStatus -IsEnabled (Get-CustomDetectionValue -Object $JsonObject -Path 'isEnabled') -Status $rawStatus
     }
 
     $severity = if ($PSBoundParameters.ContainsKey('SetSeverity')) {
@@ -116,7 +119,7 @@ function ConvertFrom-CustomDetectionJsonToYaml {
     $entityMappingsSource = Get-CustomDetectionValue -Object $JsonObject -Path 'detectionAction.alertTemplate.entityMappings'
     $entityMappings = $null
     if (Test-CustomDetectionCollection -Value $entityMappingsSource) {
-        $entityMappings = ConvertFrom-CustomDetectionEntityMappings -EntityMappings $entityMappingsSource
+        $entityMappings = ConvertFrom-CustomDetectionEntityMappings -EntityMappings $entityMappingsSource -ValidateIdentifiers:$ValidateIdentifiers
     } else {
         $impactedAssets = Get-CustomDetectionValue -Object $JsonObject -Path 'detectionAction.alertTemplate.impactedAssets'
         if (Test-CustomDetectionValue $impactedAssets) {

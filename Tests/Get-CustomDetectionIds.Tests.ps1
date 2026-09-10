@@ -151,7 +151,7 @@ Describe 'Get-CustomDetectionIds' {
             # Second call should use the cached data and not hit the API again
             $secondResult = Get-CustomDetectionIds
 
-            Assert-MockCalled Invoke-MgGraphRequestWithRetry -Times 1 -Exactly -ModuleName XDRConverter
+            Should -Invoke Invoke-MgGraphRequestWithRetry -Times 1 -Exactly -ModuleName XDRConverter
 
             $firstResult  | Should -Not -BeNullOrEmpty
             $secondResult | Should -Not -BeNullOrEmpty
@@ -187,7 +187,7 @@ Describe 'Get-CustomDetectionIds' {
             # Second call with -Force should bypass cache and call API again
             $forcedResult = Get-CustomDetectionIds -Force
 
-            Assert-MockCalled Invoke-MgGraphRequestWithRetry -Times 2 -Exactly -ModuleName XDRConverter
+            Should -Invoke Invoke-MgGraphRequestWithRetry -Times 2 -Exactly -ModuleName XDRConverter
 
             $cachedResult  | Should -Not -BeNullOrEmpty
             $forcedResult  | Should -Not -BeNullOrEmpty

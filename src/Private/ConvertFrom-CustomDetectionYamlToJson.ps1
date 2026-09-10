@@ -89,7 +89,7 @@ function ConvertFrom-CustomDetectionYamlToJson {
     $category = Get-YamlValue -Key 'alertCategory'
     $techniques = Get-YamlValue -Key 'mitreTechniques'
     if ((Test-CustomDetectionValue $tacticsInput) -and ((Test-CustomDetectionValue $category) -or (Test-CustomDetectionValue $techniques))) {
-        Write-Verbose 'Both tactics and alertCategory/mitreTechniques are present. Using tactics.'
+        Write-Warning 'Both tactics and alertCategory/mitreTechniques are present. Using tactics.'
     }
     $tactics = @()
     if (Test-CustomDetectionValue $tacticsInput) {
@@ -110,7 +110,7 @@ function ConvertFrom-CustomDetectionYamlToJson {
     $entityMappings = $null
     if (Test-CustomDetectionValue $entityMappingsInput) {
         if (Test-CustomDetectionValue $impactedEntities) {
-            Write-Verbose 'Both entityMappings and impactedEntities are present. Using entityMappings.'
+            Write-Warning 'Both entityMappings and impactedEntities are present. Using entityMappings.'
         }
         $entityMappings = ConvertTo-CustomDetectionEntityMappings -EntityMappings $entityMappingsInput -SkipIdentifierValidation:$SkipIdentifierValidation
     } elseif (Test-CustomDetectionValue $impactedEntities) {
@@ -127,7 +127,11 @@ function ConvertFrom-CustomDetectionYamlToJson {
         }
         $customDetails = [ordered]@{}
         foreach ($key in $customDetailsInput.Keys) {
-            $customDetails[[string]$key] = "$($customDetailsInput[$key])"
+            $value = $customDetailsInput[$key]
+            if ($value -isnot [string]) {
+                throw "customDetails entry '$key' must be a single string value."
+            }
+            $customDetails[[string]$key] = "$value"
         }
         $alertTemplate.customDetails = $customDetails
     }
@@ -138,6 +142,11 @@ function ConvertFrom-CustomDetectionYamlToJson {
 
     $scope = Get-YamlValue -Key 'organizationalScope'
     if (Test-CustomDetectionValue $scope) {
+        foreach ($entry in @($scope)) {
+            if ($entry -isnot [string]) {
+                throw "organizationalScope entry '$entry' must be a single device group name."
+            }
+        }
         $deviceGroups = @($scope | ForEach-Object { "$_" })
         if (@($deviceGroups | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
             throw 'organizationalScope contains an empty device group name.'

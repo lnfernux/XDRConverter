@@ -153,7 +153,7 @@ function Deploy-CustomDetection {
                 '.json' {
                     # Normalise JSON input through the YAML shape so legacy files deploy with the current body
                     $rawJson = Import-CustomDetectionJsonFile -FilePath $InputFile
-                    ConvertFrom-CustomDetectionJsonToYaml -JsonObject $rawJson
+                    ConvertFrom-CustomDetectionJsonToYaml -JsonObject $rawJson -ValidateIdentifiers
                 }
                 default {
                     throw "Unsupported file extension '$extension'. Use .yaml, .yml, or .json."
@@ -216,7 +216,7 @@ function Deploy-CustomDetection {
             #region Validate MITRE technique coverage
             if (-not $SkipMitreTechniqueValidation) {
                 # The parsed file is validated as written, so a listed parent counts and a derived one does not
-                $mitreResult = Test-CustomDetectionMitreTechnique -InputObject $yamlObj -WarningAction SilentlyContinue
+                $mitreResult = Test-CustomDetectionMitreTechnique -InputObject $yamlObj
                 if (-not $mitreResult.IsValid) {
                     $invalidList = $mitreResult.InvalidTechniques -join ', '
                     throw "MITRE technique(s) not supported by XDR for category '$($mitreResult.Category)': $invalidList. Use -SkipMitreTechniqueValidation to bypass this check."

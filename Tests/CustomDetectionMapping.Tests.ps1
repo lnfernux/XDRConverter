@@ -567,6 +567,13 @@ Describe 'CustomDetection mapping helpers' {
 
     Context 'ConvertTo-CustomDetectionEntityMappings input hygiene' {
 
+        It 'Rejects plain-string impacted entity and mapping items' {
+            InModuleScope XDRConverter {
+                { ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @('Machine') } | Should -Throw '*impactedEntities must be a mapping*'
+                { ConvertTo-CustomDetectionEntityMappings -EntityMappings @{ hosts = @('DeviceName') } } | Should -Throw "*entity mapping 'hosts' must be a mapping*"
+            }
+        }
+
         It 'Ignores OData annotations on explicit mapping items' {
             InModuleScope XDRConverter {
                 $result = ConvertTo-CustomDetectionEntityMappings -EntityMappings @{ hosts = @(@{ '@odata.type' = '#microsoft.graph.security.hostEntityMapping'; deviceIdColumn = 'DeviceId' }) }
@@ -601,6 +608,19 @@ Describe 'CustomDetection mapping helpers' {
             InModuleScope XDRConverter {
                 $yaml = @{ guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'; ruleName = 'r'; alertTitle = 't'; frequency = 'PT1H'; alertSeverity = 'Low'; alertDescription = 'd'; alertCategory = 'Execution'; queryText = 'q'; organizationalScope = @('', 'Servers') }
                 { ConvertFrom-CustomDetectionYamlToJson -YamlObject $yaml } | Should -Throw '*organizationalScope*empty*'
+            }
+        }
+
+        It 'Rejects non-string scope and custom detail values' {
+            InModuleScope XDRConverter {
+                $base = @{ guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'; ruleName = 'r'; alertTitle = 't'; frequency = 'PT1H'; alertSeverity = 'Low'; alertDescription = 'd'; alertCategory = 'Execution'; queryText = 'q' }
+                $scope = $base.Clone()
+                $scope.organizationalScope = @(@{ deviceGroups = @('Servers') })
+                { ConvertFrom-CustomDetectionYamlToJson -YamlObject $scope } | Should -Throw '*organizationalScope entry*'
+
+                $details = $base.Clone()
+                $details.customDetails = @{ Host = @{ column = 'DeviceName' }; Count = 1 }
+                { ConvertFrom-CustomDetectionYamlToJson -YamlObject $details } | Should -Throw '*customDetails entry*'
             }
         }
     }
@@ -739,9 +759,21 @@ Describe 'CustomDetection mapping helpers' {
                 ConvertFrom-CustomDetectionEntityMappings -EntityMappings $null | Should -BeNullOrEmpty
             }
         }
+
+        It 'Rejects an incomplete account mapping when identifier validation is requested' {
+            InModuleScope XDRConverter {
+                { ConvertFrom-CustomDetectionEntityMappings -EntityMappings @{ accounts = @(@{ nameColumn = 'AccountName' }) } -ValidateIdentifiers } | Should -Throw '*aadUserIdColumn*'
+            }
+        }
     }
 
     Context 'ConvertTo-CustomDetectionAutomatedActions' {
+
+        It 'Rejects a plain-string action item' {
+            InModuleScope XDRConverter {
+                { ConvertTo-CustomDetectionAutomatedActions -Actions @('IsolateMachine') } | Should -Throw '*actions must be a mapping*'
+            }
+        }
 
         It 'Rejects an action listed twice with the same fields' {
             InModuleScope XDRConverter {
@@ -795,13 +827,12 @@ Describe 'CustomDetection mapping helpers' {
             }
         }
 
-        It 'Lowercases a valid isolationType and defaults an invalid one to full' {
+        It 'Lowercases a valid isolationType and throws on an unsupported one' {
             InModuleScope XDRConverter {
                 $selective = ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = 'IsolateMachine'; additionalFields = @{ isolationType = 'Selective' } })
                 $selective.isolateDevices[0].isolationType | Should -Be 'selective'
 
-                $bad = ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = 'IsolateMachine'; additionalFields = @{ isolationType = 'Partial' } }) -WarningAction SilentlyContinue
-                $bad.isolateDevices[0].isolationType | Should -Be 'full'
+                { ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = 'IsolateMachine'; additionalFields = @{ isolationType = 'Partial' } }) } | Should -Throw "*Use 'Full' or 'Selective'*"
             }
         }
 
@@ -922,9 +953,12 @@ Describe 'CustomDetection mapping helpers' {
                         automatedActions = [PSCustomObject]@{ futureActions = @([PSCustomObject]@{ deviceIdColumn = 'DeviceId' }) }
                     }
                 }
-                $patch = Complete-CustomDetectionPatchBody -Body $body -Remote $remote
+                $patch = Complete-CustomDetectionPatchBody -Body $body -Remote $remote -WarningVariable warning -WarningAction SilentlyContinue
                 @($patch.detectionAction.automatedActions.Keys) | Should -Be @('futureActions')
                 @($patch.detectionAction.alertTemplate.entityMappings.Keys) | Should -Be @('futureThings')
+                @($warning).Count | Should -Be 2
+                "$warning" | Should -Match 'futureActions'
+                "$warning" | Should -Match 'futureThings'
                 $patch.detectionAction.Keys | Should -Not -Contain 'organizationalScope'
             }
         }

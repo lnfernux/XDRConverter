@@ -150,6 +150,62 @@ queryText: DeviceEvents | where ActionType == "Test"
             $result | Should -Not -BeNullOrEmpty
             $result.Action | Should -Be 'Created'
         }
+
+        It 'Should reject an incomplete account mapping from JSON input' {
+            $testJson = @"
+{
+    "id": "rule-81fb771a-c57e-41b8-9905-63dbf267c13f",
+    "displayName": "TEST-IncompleteAccount",
+    "status": "disabled",
+    "detectionAction": {
+        "alertTemplate": {
+            "title": "Test",
+            "description": "Test",
+            "severity": "informational",
+            "tactics": [{ "tactic": "Execution" }],
+            "entityMappings": {
+                "accounts": [{ "nameColumn": "AccountName" }],
+                "hosts": [{ "deviceIdColumn": "DeviceId" }]
+            }
+        }
+    },
+    "queryCondition": { "queryText": "DeviceEvents | take 0" },
+    "schedule": { "frequency": "PT1H" }
+}
+"@
+            $tempFile = Join-Path TestDrive: 'incomplete-account.json'
+            $testJson | Out-File -FilePath $tempFile -Encoding UTF8
+
+            { Deploy-CustomDetection -InputFile $tempFile -Confirm:$false } | Should -Throw '*aadUserIdColumn*'
+        }
+
+        It 'Should warn when JSON status contradicts isEnabled' {
+            $testJson = @"
+{
+    "id": "rule-81fb771a-c57e-41b8-9905-63dbf267c13f",
+    "displayName": "TEST-StatusContradiction",
+    "isEnabled": false,
+    "status": "enabled",
+    "detectionAction": {
+        "alertTemplate": {
+            "title": "Test",
+            "description": "Test",
+            "severity": "informational",
+            "tactics": [{ "tactic": "Execution" }]
+        }
+    },
+    "queryCondition": { "queryText": "DeviceEvents | take 0" },
+    "schedule": { "frequency": "PT1H" }
+}
+"@
+            $tempFile = Join-Path TestDrive: 'status-contradiction.json'
+            $testJson | Out-File -FilePath $tempFile -Encoding UTF8
+            Mock Invoke-MgGraphRequest { return @{ id = 'new-rule-id' } } -ModuleName XDRConverter
+
+            $result = Deploy-CustomDetection -InputFile $tempFile -Confirm:$false -WarningVariable warning -WarningAction SilentlyContinue
+            $result.Action | Should -Be 'Created'
+            "$warning" | Should -Match 'contradicts status'
+        }
     }
 
     Context 'Description Tag' {
@@ -938,6 +994,34 @@ queryText: DeviceEvents | take 1
             $result = Deploy-CustomDetection -InputFile $tempFile -Confirm:$false
             $result.Action | Should -Be 'Created'
         }
+
+                It 'Should surface the warning when the category has no XDR mapping' {
+                        Mock Invoke-MgGraphRequest { return @{ id = 'new-rule-id' } } -ModuleName XDRConverter
+
+                    $testJson = @"
+        {
+            "id": "rule-81fb771a-c57e-41b8-9905-63dbf267c13f",
+            "displayName": "TEST-MitreUnmapped",
+            "status": "disabled",
+            "detectionAction": {
+                "alertTemplate": {
+                    "title": "Test",
+                    "description": "Test",
+                    "severity": "informational",
+                    "tactics": [{ "tactic": "SuspiciousActivity", "techniques": [{ "technique": "T9999" }] }]
+                }
+            },
+            "queryCondition": { "queryText": "DeviceEvents | take 0" },
+            "schedule": { "frequency": "PT1H" }
+        }
+"@
+                    $tempFile = Join-Path TestDrive: 'mitre-unmapped.json'
+                    $testJson | Out-File -FilePath $tempFile -Encoding UTF8
+
+                    $result = Deploy-CustomDetection -InputFile $tempFile -Confirm:$false -WarningVariable warning -WarningAction SilentlyContinue
+                    $result.Action | Should -Be 'Created'
+                    "$warning" | Should -Match 'not present in the XDR technique mapping'
+                }
 
         It 'Should bypass validation and deploy when -SkipMitreTechniqueValidation is set' {
             Mock Invoke-MgGraphRequest { return @{ id = 'new-rule-id' } } -ModuleName XDRConverter

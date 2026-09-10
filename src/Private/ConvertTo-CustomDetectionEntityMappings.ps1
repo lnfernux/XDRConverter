@@ -85,7 +85,9 @@ function ConvertTo-CustomDetectionEntityMappings {
     if ($PSCmdlet.ParameterSetName -eq 'ImpactedEntities') {
         foreach ($entity in @($ImpactedEntities)) {
             $map = ConvertTo-CustomDetectionHashtable -InputObject $entity
-            if (-not $map) { continue }
+            if (-not $map) {
+                throw "Each item in impactedEntities must be a mapping with entityType and entityIdentifier. Got '$entity'."
+            }
             $entityType = "$($map['entityType'])".Trim()
             $identifier = "$($map['entityIdentifier'])".Trim()
             if (-not $entityType -or -not $identifier) {
@@ -164,7 +166,9 @@ function ConvertTo-CustomDetectionEntityMappings {
 
             foreach ($rawItem in $rawItems) {
                 $item = ConvertTo-CustomDetectionHashtable -InputObject $rawItem
-                if (-not $item) { continue }
+                if (-not $item) {
+                    throw "Each item in entity mapping '$collection' must be a mapping of column name to value. Got '$rawItem'."
+                }
                 $cleanItem = [ordered]@{}
                 foreach ($columnKey in @($item.Keys)) {
                     if ("$columnKey".StartsWith('@')) { continue }
