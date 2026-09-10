@@ -158,11 +158,7 @@ function ConvertTo-CustomDetectionEntityMappings {
                 }
             }
 
-            $rawItems = $mappings[$key]
-            if ($null -eq $rawItems) { continue }
-            if ($rawItems -is [string] -or $rawItems -isnot [System.Collections.IEnumerable] -or $rawItems -is [System.Collections.IDictionary]) {
-                $rawItems = @($rawItems)
-            }
+            $rawItems = ConvertTo-CustomDetectionList -Value $mappings[$key]
 
             foreach ($rawItem in $rawItems) {
                 $item = ConvertTo-CustomDetectionHashtable -InputObject $rawItem
@@ -170,10 +166,9 @@ function ConvertTo-CustomDetectionEntityMappings {
                     throw "Each item in entity mapping '$collection' must be a mapping of column name to value. Got '$rawItem'."
                 }
                 $cleanItem = [ordered]@{}
-                foreach ($columnKey in @($item.Keys)) {
-                    if ("$columnKey".StartsWith('@')) { continue }
-                    $value = $item[$columnKey]
-                    if ($null -eq $value -or "$value" -eq '') { continue }
+                $columns = Get-CustomDetectionPopulatedEntry -Map $item
+                foreach ($columnKey in @($columns.Keys)) {
+                    $value = $columns[$columnKey]
                     if ($value -isnot [string] -and $value -is [System.Collections.IEnumerable]) {
                         throw "Column '$columnKey' of entity mapping '$collection' must be a single column name."
                     }
@@ -232,14 +227,7 @@ function ConvertTo-CustomDetectionEntityMappings {
         $items = [System.Collections.Generic.List[object]]::new()
         $knownColumns = if ($collectionColumns.Contains($collection)) { $collectionColumns[$collection] } else { @() }
         foreach ($item in $result[$collection]) {
-            $sortedItem = [ordered]@{}
-            foreach ($column in $knownColumns) {
-                if ($item.Contains($column)) { $sortedItem[$column] = $item[$column] }
-            }
-            foreach ($column in $item.Keys) {
-                if (-not $sortedItem.Contains($column)) { $sortedItem[$column] = $item[$column] }
-            }
-            $items.Add($sortedItem)
+            $items.Add((ConvertTo-CustomDetectionOrderedMap -Map $item -Order $knownColumns))
         }
         $result[$collection] = [object[]]$items.ToArray()
     }

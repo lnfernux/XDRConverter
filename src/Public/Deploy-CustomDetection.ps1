@@ -266,7 +266,6 @@ function Deploy-CustomDetection {
             #endregion
 
             #region Discover existing rule
-            $existingRuleId = $null
             $existingRule = $null
 
             # Try by rule id first (cached)

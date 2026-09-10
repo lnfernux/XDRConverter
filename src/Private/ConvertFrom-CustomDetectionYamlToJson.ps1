@@ -43,15 +43,9 @@ function ConvertFrom-CustomDetectionYamlToJson {
         }
     }
 
-    function Get-YamlValue {
-        param([string]$Key)
-        if ($yaml.Contains($Key)) { return $yaml[$Key] }
-        return $null
-    }
-
     # The guid and the id alias name the same rule, with or without the rule prefix the request carries
-    $guid = Get-YamlValue -Key 'guid'
-    $idAlias = Get-YamlValue -Key 'id'
+    $guid = Get-CustomDetectionValue -Object $yaml -Path 'guid'
+    $idAlias = Get-CustomDetectionValue -Object $yaml -Path 'id'
     $bareGuid = if (Test-CustomDetectionValue $guid) { "$guid".Trim() -replace '^rule-', '' } else { $null }
     $bareAlias = if (Test-CustomDetectionValue $idAlias) { "$idAlias".Trim() -replace '^rule-', '' } else { $null }
     if ($bareGuid -and $bareAlias -and ($bareGuid -ne $bareAlias)) {
@@ -62,32 +56,32 @@ function ConvertFrom-CustomDetectionYamlToJson {
     $status = if ($PSBoundParameters.ContainsKey('SetEnabled')) {
         ConvertTo-CustomDetectionStatus -IsEnabled $SetEnabled
     } else {
-        ConvertTo-CustomDetectionStatus -IsEnabled (Get-YamlValue -Key 'isEnabled') -Status (Get-YamlValue -Key 'status')
+        ConvertTo-CustomDetectionStatus -IsEnabled (Get-CustomDetectionValue -Object $yaml -Path 'isEnabled') -Status (Get-CustomDetectionValue -Object $yaml -Path 'status')
     }
 
     $severity = if ($SetSeverity) {
         $SetSeverity
     } else {
-        Get-YamlValue -Key 'alertSeverity'
+        Get-CustomDetectionValue -Object $yaml -Path 'alertSeverity'
     }
     if (-not (Test-CustomDetectionValue $severity)) {
         throw 'The alertSeverity value is required. Use Informational, Low, Medium or High.'
     }
 
     $alertTemplate = [ordered]@{
-        title       = Get-YamlValue -Key 'alertTitle'
-        description = Get-YamlValue -Key 'alertDescription'
+        title       = Get-CustomDetectionValue -Object $yaml -Path 'alertTitle'
+        description = Get-CustomDetectionValue -Object $yaml -Path 'alertDescription'
         severity    = "$severity".ToLowerInvariant()
     }
 
-    $recommendedActions = Get-YamlValue -Key 'alertRecommendedAction'
+    $recommendedActions = Get-CustomDetectionValue -Object $yaml -Path 'alertRecommendedAction'
     if (Test-CustomDetectionValue $recommendedActions) {
         $alertTemplate.recommendedActions = $recommendedActions
     }
 
-    $tacticsInput = Get-YamlValue -Key 'tactics'
-    $category = Get-YamlValue -Key 'alertCategory'
-    $techniques = Get-YamlValue -Key 'mitreTechniques'
+    $tacticsInput = Get-CustomDetectionValue -Object $yaml -Path 'tactics'
+    $category = Get-CustomDetectionValue -Object $yaml -Path 'alertCategory'
+    $techniques = Get-CustomDetectionValue -Object $yaml -Path 'mitreTechniques'
     if ((Test-CustomDetectionValue $tacticsInput) -and ((Test-CustomDetectionValue $category) -or (Test-CustomDetectionValue $techniques))) {
         Write-Warning 'Both tactics and alertCategory/mitreTechniques are present. Using tactics.'
     }
@@ -105,8 +99,8 @@ function ConvertFrom-CustomDetectionYamlToJson {
     }
     $alertTemplate['tactics'] = [object[]]$tactics
 
-    $entityMappingsInput = Get-YamlValue -Key 'entityMappings'
-    $impactedEntities = Get-YamlValue -Key 'impactedEntities'
+    $entityMappingsInput = Get-CustomDetectionValue -Object $yaml -Path 'entityMappings'
+    $impactedEntities = Get-CustomDetectionValue -Object $yaml -Path 'impactedEntities'
     $entityMappings = $null
     if (Test-CustomDetectionValue $entityMappingsInput) {
         if (Test-CustomDetectionValue $impactedEntities) {
@@ -120,7 +114,7 @@ function ConvertFrom-CustomDetectionYamlToJson {
         $alertTemplate.entityMappings = $entityMappings
     }
 
-    $customDetailsInput = ConvertTo-CustomDetectionHashtable -InputObject (Get-YamlValue -Key 'customDetails')
+    $customDetailsInput = ConvertTo-CustomDetectionHashtable -InputObject (Get-CustomDetectionValue -Object $yaml -Path 'customDetails')
     if ($customDetailsInput -and $customDetailsInput.Count -gt 0) {
         if ($customDetailsInput.Count -gt 20) {
             throw "customDetails holds $($customDetailsInput.Count) entries. The limit is 20."
@@ -140,7 +134,7 @@ function ConvertFrom-CustomDetectionYamlToJson {
         alertTemplate = $alertTemplate
     }
 
-    $scope = Get-YamlValue -Key 'organizationalScope'
+    $scope = Get-CustomDetectionValue -Object $yaml -Path 'organizationalScope'
     if (Test-CustomDetectionValue $scope) {
         foreach ($entry in @($scope)) {
             if ($entry -isnot [string]) {
@@ -156,7 +150,7 @@ function ConvertFrom-CustomDetectionYamlToJson {
         }
     }
 
-    $actions = Get-YamlValue -Key 'actions'
+    $actions = Get-CustomDetectionValue -Object $yaml -Path 'actions'
     if (Test-CustomDetectionValue $actions) {
         $automatedActions = ConvertTo-CustomDetectionAutomatedActions -Actions @($actions)
         if ($automatedActions) {
@@ -168,19 +162,19 @@ function ConvertFrom-CustomDetectionYamlToJson {
     if ($ruleGuid) {
         $jsonObj.id = "rule-$ruleGuid"
     }
-    $jsonObj.displayName = Get-YamlValue -Key 'ruleName'
+    $jsonObj.displayName = Get-CustomDetectionValue -Object $yaml -Path 'ruleName'
     $jsonObj.status = $status
 
-    $description = Get-YamlValue -Key 'description'
+    $description = Get-CustomDetectionValue -Object $yaml -Path 'description'
     if (Test-CustomDetectionValue $description) {
         $jsonObj.description = $description
     }
 
     $jsonObj.queryCondition = [ordered]@{
-        queryText = Get-YamlValue -Key 'queryText'
+        queryText = Get-CustomDetectionValue -Object $yaml -Path 'queryText'
     }
     $jsonObj.schedule = [ordered]@{
-        frequency = ConvertTo-CustomDetectionFrequency -Value (Get-YamlValue -Key 'frequency')
+        frequency = ConvertTo-CustomDetectionFrequency -Value (Get-CustomDetectionValue -Object $yaml -Path 'frequency')
     }
     $jsonObj.detectionAction = $detectionAction
 

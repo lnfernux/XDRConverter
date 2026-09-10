@@ -177,18 +177,7 @@ function ConvertFrom-CustomDetectionJsonToYaml {
         $yamlObj['actions'] = [object[]]$actions
     }
 
-    $orderedYamlObj = [ordered]@{}
-    foreach ($key in $DefaultSortOrderInYAML) {
-        if ($yamlObj.Contains($key)) {
-            $orderedYamlObj[$key] = $yamlObj[$key]
-        }
-    }
-
-    foreach ($key in $yamlObj.Keys) {
-        if (-not $orderedYamlObj.Contains($key)) {
-            $orderedYamlObj[$key] = $yamlObj[$key]
-        }
-    }
+    $orderedYamlObj = ConvertTo-CustomDetectionOrderedMap -Map $yamlObj -Order $DefaultSortOrderInYAML
 
     return $orderedYamlObj
 }

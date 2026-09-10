@@ -155,19 +155,7 @@ function ConvertTo-CustomDetectionJson {
 
             # Determine output file path when using naming switches
             if ($UseDisplayNameAsFilename -or $UseIdAsFilename) {
-                $folder = if ($OutputFolder) { $OutputFolder } else { [System.IO.Path]::GetTempPath() }
-                if (-not (Test-Path $folder)) {
-                    New-Item -ItemType Directory -Path $folder -Force | Out-Null
-                }
-                if ($UseDisplayNameAsFilename) {
-                    # sanitize  display name for use as a filename
-                    $safeName = $jsonObj.displayName -replace '[\\/:*?"<>|]', '_'
-                    # Convert whitespace-separated words to CamelCase
-                    $safeName = ($safeName -split '\s+' | ForEach-Object { $_.Substring(0, 1).ToUpper() + $_.Substring(1) }) -join ''
-                    $OutputFile = Join-Path $folder "$safeName.json"
-                } else {
-                    $OutputFile = Join-Path $folder "$(Get-CustomDetectionIdentity -Rule $jsonObj).json"
-                }
+                $OutputFile = Resolve-CustomDetectionOutputFile -Rule $jsonObj -Extension '.json' -OutputFolder $OutputFolder -UseDisplayName:$UseDisplayNameAsFilename
             }
 
             # Convert to JSON string with proper formatting

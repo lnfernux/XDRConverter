@@ -29,14 +29,12 @@ function ConvertFrom-CustomDetectionAutomatedActions {
         foreach ($responseAction in @($ResponseActions)) {
             $map = ConvertTo-CustomDetectionHashtable -InputObject $responseAction
             if (-not $map) { continue }
-            $odataType = "$($map['@odata.type'])"
-            $suffix = if ($odataType -match '([A-Za-z]+)$') { $Matches[1] } else { $odataType }
-            $entry = $actionMap | Where-Object { $_.LegacyType -eq $suffix } | Select-Object -First 1
-            if (-not $entry) {
-                Write-Warning "Unknown response action type '$odataType'. Skipping."
+            $legacy = Get-CustomDetectionLegacyAction -ResponseAction $map -ActionMap $actionMap
+            if (-not $legacy.Entry) {
+                Write-Warning "Unknown response action type '$($legacy.OdataType)'. Skipping."
                 continue
             }
-            $action = [ordered]@{ actionType = $entry.ActionType }
+            $action = [ordered]@{ actionType = $legacy.Entry.ActionType }
             if ($map['isolationType']) {
                 $action.additionalFields = [ordered]@{ isolationType = $textInfo.ToTitleCase("$($map['isolationType'])") }
             }
@@ -52,12 +50,8 @@ function ConvertFrom-CustomDetectionAutomatedActions {
 
     foreach ($key in @($collections.Keys)) {
         if ("$key".StartsWith('@')) { continue }
-        $rawItems = $collections[$key]
-        if ($null -eq $rawItems) { continue }
-        if ($rawItems -is [string] -or $rawItems -isnot [System.Collections.IEnumerable] -or $rawItems -is [System.Collections.IDictionary]) {
-            $rawItems = @($rawItems)
-        }
-        if (@($rawItems).Count -eq 0) { continue }
+        $rawItems = ConvertTo-CustomDetectionList -Value $collections[$key]
+        if ($rawItems.Count -eq 0) { continue }
 
         $entry = $actionMap | Where-Object { $_.Collection -eq $key } | Select-Object -First 1
         $actionType = if ($entry) { $entry.ActionType } else {
@@ -70,10 +64,9 @@ function ConvertFrom-CustomDetectionAutomatedActions {
             $action = [ordered]@{ actionType = $actionType }
             $fields = [ordered]@{}
             if ($item) {
-                foreach ($columnKey in @($item.Keys)) {
-                    if ("$columnKey".StartsWith('@')) { continue }
-                    $value = $item[$columnKey]
-                    if ($null -eq $value -or "$value" -eq '') { continue }
+                $columns = Get-CustomDetectionPopulatedEntry -Map $item
+                foreach ($columnKey in @($columns.Keys)) {
+                    $value = $columns[$columnKey]
                     if ($columnKey -eq 'isolationType') {
                         $fields[$columnKey] = $textInfo.ToTitleCase("$value")
                     } else {

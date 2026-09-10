@@ -16,12 +16,6 @@ function Get-CustomDetectionComparableState {
         [PSObject]$Rule
     )
 
-    function Get-Text {
-        param([object]$Value)
-        if ($null -eq $Value) { return '' }
-        return "$Value"
-    }
-
     function ConvertTo-SortedObject {
         param([object]$Value)
         if ($null -eq $Value) { return $null }
@@ -113,8 +107,6 @@ function Get-CustomDetectionComparableState {
             } elseif ($scopeMap.Contains('scopeNames') -and $null -ne $scopeMap['scopeNames']) {
                 $deviceGroups = @($scopeMap['scopeNames'])
             }
-        } elseif ($scopeSource -isnot [string]) {
-            $deviceGroups = @($scopeSource)
         } else {
             $deviceGroups = @($scopeSource)
         }
@@ -132,15 +124,15 @@ function Get-CustomDetectionComparableState {
     }
 
     return [ordered]@{
-        displayName        = Get-Text (Get-CustomDetectionValue -Object $Rule -Path 'displayName')
-        status             = Get-Text $status
-        description        = Get-Text (Get-CustomDetectionValue -Object $Rule -Path 'description')
+        displayName        = "$(Get-CustomDetectionValue -Object $Rule -Path 'displayName')"
+        status             = "$status"
+        description        = "$(Get-CustomDetectionValue -Object $Rule -Path 'description')"
         frequency          = $frequency
-        queryText          = Get-Text (Get-CustomDetectionValue -Object $Rule -Path 'queryCondition.queryText')
-        title              = Get-Text (Get-CustomDetectionValue -Object $Rule -Path 'detectionAction.alertTemplate.title')
-        alertDescription   = Get-Text (Get-CustomDetectionValue -Object $Rule -Path 'detectionAction.alertTemplate.description')
-        severity           = (Get-Text (Get-CustomDetectionValue -Object $Rule -Path 'detectionAction.alertTemplate.severity')).ToLowerInvariant()
-        recommendedActions = Get-Text (Get-CustomDetectionValue -Object $Rule -Path 'detectionAction.alertTemplate.recommendedActions')
+        queryText          = "$(Get-CustomDetectionValue -Object $Rule -Path 'queryCondition.queryText')"
+        title              = "$(Get-CustomDetectionValue -Object $Rule -Path 'detectionAction.alertTemplate.title')"
+        alertDescription   = "$(Get-CustomDetectionValue -Object $Rule -Path 'detectionAction.alertTemplate.description')"
+        severity           = ("$(Get-CustomDetectionValue -Object $Rule -Path 'detectionAction.alertTemplate.severity')").ToLowerInvariant()
+        recommendedActions = "$(Get-CustomDetectionValue -Object $Rule -Path 'detectionAction.alertTemplate.recommendedActions')"
         tactics            = ConvertTo-SortedJson -Value $tactics
         entityMappings     = ConvertTo-SortedJson -Value $entityMappings
         customDetails      = ConvertTo-SortedJson -Value $customDetails

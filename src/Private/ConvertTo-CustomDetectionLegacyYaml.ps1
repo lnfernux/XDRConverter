@@ -168,9 +168,5 @@ function ConvertTo-CustomDetectionLegacyYaml {
         $legacy['actions'] = [object[]]$actions.ToArray()
     }
 
-    $ordered = [ordered]@{}
-    foreach ($key in $sortOrder) {
-        if ($legacy.Contains($key)) { $ordered[$key] = $legacy[$key] }
-    }
-    return $ordered
+    return ConvertTo-CustomDetectionOrderedMap -Map $legacy -Order $sortOrder
 }

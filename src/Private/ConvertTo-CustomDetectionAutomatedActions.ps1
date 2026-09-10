@@ -27,13 +27,11 @@ function ConvertTo-CustomDetectionAutomatedActions {
         foreach ($responseAction in @($ResponseActions)) {
             $map = ConvertTo-CustomDetectionHashtable -InputObject $responseAction
             if (-not $map) { continue }
-            $odataType = "$($map['@odata.type'])"
-            $suffix = if ($odataType -match '([A-Za-z]+)$') { $Matches[1] } else { $odataType }
-            $entry = $actionMap | Where-Object { $_.LegacyType -eq $suffix } | Select-Object -First 1
-            if (-not $entry) {
-                throw "Unsupported response action type '$odataType'."
+            $legacy = Get-CustomDetectionLegacyAction -ResponseAction $map -ActionMap $actionMap
+            if (-not $legacy.Entry) {
+                throw "Unsupported response action type '$($legacy.OdataType)'."
             }
-            $action = [ordered]@{ actionType = $entry.ActionType }
+            $action = [ordered]@{ actionType = $legacy.Entry.ActionType }
             if ($map['isolationType']) {
                 $action.additionalFields = @{ isolationType = "$($map['isolationType'])" }
             }
@@ -82,9 +80,9 @@ function ConvertTo-CustomDetectionAutomatedActions {
             if ($hasSha256 -and -not $hasSha1 -and $item.Contains('sha1Column')) {
                 $item.Remove('sha1Column')
             }
-            foreach ($key in @($fields.Keys)) {
-                $value = $fields[$key]
-                if ($null -eq $value -or "$value" -eq '') { continue }
+            $populated = Get-CustomDetectionPopulatedEntry -Map $fields
+            foreach ($key in @($populated.Keys)) {
+                $value = $populated[$key]
                 if ($key -eq 'isolationType') {
                     $isolationType = "$value".ToLowerInvariant()
                     if ($isolationType -notin @('full', 'selective')) {
