@@ -60,7 +60,7 @@ function ConvertTo-CustomDetectionJson {
     .EXAMPLE
         Get-CustomDetection | ConvertTo-CustomDetectionJson -UseIdAsFilename
 
-        Writes each rule to a JSON file named after its detectorId in the user's temp directory.
+        Writes each rule to a JSON file named after its guid in the user's temp directory.
     #>
     [CmdletBinding(DefaultParameterSetName = 'File')]
     [OutputType([string])]
@@ -82,7 +82,7 @@ function ConvertTo-CustomDetectionJson {
         [Parameter(Mandatory, ParameterSetName = 'ObjectByDisplayName', HelpMessage = 'Use the display name as the output filename')]
         [switch]$UseDisplayNameAsFilename,
 
-        [Parameter(Mandatory, ParameterSetName = 'ObjectById', HelpMessage = 'Use the detectorId as the output filename')]
+        [Parameter(Mandatory, ParameterSetName = 'ObjectById', HelpMessage = 'Use the guid as the output filename')]
         [switch]$UseIdAsFilename,
 
         [Parameter(ParameterSetName = 'ObjectByDisplayName', HelpMessage = 'Folder to write the output file to')]

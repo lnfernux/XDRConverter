@@ -7,8 +7,9 @@ function ConvertFrom-CustomDetectionJsonToYaml {
         Emits the current YAML keys (tactics, entityMappings, customDetails,
         ISO 8601 frequency, description). Rules that still carry the legacy
         properties (category, mitreTechniques, impactedAssets, responseActions,
-        period, isEnabled) are translated so the output always uses the current
-        keys. Read-only and runtime properties are dropped.
+        period, isEnabled) are translated so the output uses the current keys.
+        isEnabled is always emitted and status only for autoDisabled. Read-only
+        and runtime properties are dropped.
     #>
     [CmdletBinding()]
     param(

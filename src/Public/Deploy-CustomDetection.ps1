@@ -36,8 +36,8 @@ function Deploy-CustomDetection {
         Deploy the rule with status = disabled regardless of the file value.
 
     .PARAMETER NoDescriptionTag
-        When set, the "[<UUID>]" tag is NOT appended to the description. The
-        display name then becomes the only identity on redeploy.
+        When set, the "[<UUID>]" tag is NOT appended to the description. A rule
+        that does not carry the rule-<guid> id is then matched by its display name alone.
 
     .PARAMETER DescriptionTagPrefix
         Prefix placed before the UUID inside the tag, e.g. 'PREFIX' produces "[PREFIX:<UUID>]".
@@ -57,7 +57,7 @@ function Deploy-CustomDetection {
 
     .PARAMETER SkipMitreTechniqueValidation
         Skip the pre-deployment check that verifies all listed MITRE ATT&CK techniques are supported
-        by XDR for the selected alert category. Use this to deploy rules that include techniques not
+        by XDR for each tactic. Use this to deploy rules that include techniques not
         yet reflected in the local XDR technique mapping.
 
     .PARAMETER WhatIf
@@ -215,7 +215,7 @@ function Deploy-CustomDetection {
 
             #region Validate MITRE technique coverage
             if (-not $SkipMitreTechniqueValidation) {
-                # The parsed file is validated as written, so a listed parent counts and a derived one does not
+                # YAML input is validated as written, so a listed parent counts and a derived one does not. JSON input is normalised first, so its derived parents are validated too
                 $mitreResult = Test-CustomDetectionMitreTechnique -InputObject $yamlObj
                 if (-not $mitreResult.IsValid) {
                     $invalidList = $mitreResult.InvalidTechniques -join ', '
@@ -283,7 +283,7 @@ function Deploy-CustomDetection {
                 }
             }
 
-            # Without a tag the display name is the only identity left. The API keeps names unique
+            # A rule without the client id and without a tag can only be matched by name. The API keeps names unique
             if (-not $existingRuleId -and $NoDescriptionTag) {
                 $byName = Get-CustomDetectionIds | Where-Object { $_.DisplayName -eq $jsonObj.displayName } | Select-Object -First 1
                 if ($byName) {

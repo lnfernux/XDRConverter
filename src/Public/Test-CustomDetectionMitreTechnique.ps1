@@ -39,7 +39,7 @@ function Test-CustomDetectionMitreTechnique {
         Validates all YAML files in a directory.
 
     .EXAMPLE
-        Import-CustomDetectionYamlFile -FilePath '.\detection.yaml' | Test-CustomDetectionMitreTechnique
+        ConvertFrom-Yaml (Get-Content '.\detection.yaml' -Raw) | Test-CustomDetectionMitreTechnique
 
         Pipeline input from a parsed YAML object.
 

@@ -228,7 +228,7 @@ Test-CustomDetectionMitreTechnique -InputFile '.\detection.yaml'
 Get-ChildItem '.\detections\*.yaml' | ForEach-Object { Test-CustomDetectionMitreTechnique -InputFile $_.FullName }
 
 # Pipeline input from a parsed YAML object
-Import-CustomDetectionYamlFile -FilePath '.\detection.yaml' | Test-CustomDetectionMitreTechnique
+ConvertFrom-Yaml (Get-Content '.\detection.yaml' -Raw) | Test-CustomDetectionMitreTechnique
 
 # Check result and warn on unsupported techniques
 $result = Test-CustomDetectionMitreTechnique -InputFile '.\detection.yaml'

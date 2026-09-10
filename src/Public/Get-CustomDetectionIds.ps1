@@ -21,7 +21,7 @@ function Get-CustomDetectionIds {
     .EXAMPLE
         Get-CustomDetectionIds
 
-        Returns a list of detection rule IDs and detector IDs (cached for 60 min).
+        Returns a list of detection rule IDs, display names and description tags (cached for 60 min).
 
     .EXAMPLE
         Get-CustomDetectionIds -Force

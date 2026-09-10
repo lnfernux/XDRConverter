@@ -24,7 +24,9 @@ function ConvertTo-CustomDetectionYaml {
         Cannot be combined with -OutputFile or -UseIdAsFilename.
 
     .PARAMETER UseIdAsFilename
-        Use the rule's detectorId (GUID) as the output filename (with .yaml extension).
+        Use the rule's guid as the output filename (with .yaml extension). Taken from the
+        description tag, then a UUID rule id, then the guid after the rule- prefix, then
+        the legacy detectorId.
         The file is written to -OutputFolder (or the user's temp directory if not specified).
         Cannot be combined with -OutputFile or -UseDisplayNameAsFilename.
 
@@ -62,7 +64,7 @@ function ConvertTo-CustomDetectionYaml {
     .EXAMPLE
         Get-CustomDetection | ConvertTo-CustomDetectionYaml -UseIdAsFilename
 
-        Writes each rule to a YAML file named after its detectorId in the user's temp directory.
+        Writes each rule to a YAML file named after its guid in the user's temp directory.
     #>
     [CmdletBinding(DefaultParameterSetName = 'File')]
     [OutputType([string])]
@@ -84,7 +86,7 @@ function ConvertTo-CustomDetectionYaml {
         [Parameter(Mandatory, ParameterSetName = 'ObjectByDisplayName', HelpMessage = 'Use the display name as the output filename')]
         [switch]$UseDisplayNameAsFilename,
 
-        [Parameter(Mandatory, ParameterSetName = 'ObjectById', HelpMessage = 'Use the detectorId as the output filename')]
+        [Parameter(Mandatory, ParameterSetName = 'ObjectById', HelpMessage = 'Use the guid as the output filename')]
         [switch]$UseIdAsFilename,
 
         [Parameter(ParameterSetName = 'ObjectByDisplayName', HelpMessage = 'Folder to write the output file to')]
