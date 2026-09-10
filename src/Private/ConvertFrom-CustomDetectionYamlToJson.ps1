@@ -144,8 +144,12 @@ function ConvertFrom-CustomDetectionYamlToJson {
 
     $scope = Get-YamlValue -Key 'organizationalScope'
     if (Test-HasValue $scope) {
+        $deviceGroups = @($scope | ForEach-Object { "$_" })
+        if (@($deviceGroups | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
+            throw 'organizationalScope contains an empty device group name.'
+        }
         $detectionAction['organizationalScope'] = [ordered]@{
-            deviceGroups = [object[]]@($scope | ForEach-Object { "$_" })
+            deviceGroups = [object[]]$deviceGroups
         }
     }
 

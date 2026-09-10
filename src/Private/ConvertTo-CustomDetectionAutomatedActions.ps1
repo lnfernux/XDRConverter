@@ -94,6 +94,17 @@ function ConvertTo-CustomDetectionAutomatedActions {
             }
         }
 
+        # File input only. The API keeps every item it is sent, so an exact repeat is a mistake and a repeat with other fields gets a warning
+        if ($PSCmdlet.ParameterSetName -eq 'Actions' -and $result.Contains($entry.Collection)) {
+            $itemJson = $item | ConvertTo-Json -Compress -Depth 5
+            foreach ($existing in $result[$entry.Collection]) {
+                if (($existing | ConvertTo-Json -Compress -Depth 5) -ceq $itemJson) {
+                    throw "Action '$actionType' is listed twice with the same fields. List each action once."
+                }
+            }
+            Write-Warning "Action '$actionType' is listed more than once. The rule keeps every item, so check that both are intended."
+        }
+
         if (-not $result.Contains($entry.Collection)) {
             $result[$entry.Collection] = [System.Collections.Generic.List[object]]::new()
         }

@@ -170,6 +170,9 @@ function ConvertTo-CustomDetectionEntityMappings {
                     if ("$columnKey".StartsWith('@')) { continue }
                     $value = $item[$columnKey]
                     if ($null -eq $value -or "$value" -eq '') { continue }
+                    if ($value -isnot [string] -and $value -is [System.Collections.IEnumerable]) {
+                        throw "Column '$columnKey' of entity mapping '$collection' must be a single column name."
+                    }
                     if ($collectionColumns.Contains($collection) -and $columnKey -notin $collectionColumns[$collection]) {
                         $validColumns = $collectionColumns[$collection] -join ', '
                         if ($SkipIdentifierValidation) {

@@ -115,6 +115,23 @@ Describe 'CustomDetection mapping helpers' {
             }
         }
 
+        It 'Accepts the string false as disabled' {
+            InModuleScope XDRConverter {
+                ConvertTo-CustomDetectionStatus -IsEnabled 'False' | Should -Be 'disabled'
+            }
+        }
+
+        It 'Rejects <Value> as an isEnabled value' -ForEach @(
+            @{ Value = 'yes' }
+            @{ Value = 'on' }
+            @{ Value = 1 }
+            @{ Value = 'maybe' }
+        ) {
+            InModuleScope XDRConverter -Parameters @{ Value = $Value } {
+                { ConvertTo-CustomDetectionStatus -IsEnabled $Value } | Should -Throw '*isEnabled*true or false*'
+            }
+        }
+
         It 'Lets status win over isEnabled' {
             InModuleScope XDRConverter {
                 ConvertTo-CustomDetectionStatus -IsEnabled $true -Status 'disabled' -WarningAction SilentlyContinue | Should -Be 'disabled'
@@ -557,6 +574,12 @@ Describe 'CustomDetection mapping helpers' {
             }
         }
 
+        It 'Rejects a column value that is not a single name' {
+            InModuleScope XDRConverter {
+                { ConvertTo-CustomDetectionEntityMappings -EntityMappings @{ hosts = @(@{ deviceIdColumn = @('DeviceId', 'DeviceName') }) } } | Should -Throw '*deviceIdColumn*single column name*'
+            }
+        }
+
         It 'Rejects an explicit account mapping without a key column' {
             InModuleScope XDRConverter {
                 { ConvertTo-CustomDetectionEntityMappings -EntityMappings @{ accounts = @(@{ nameColumn = 'AccountName' }) } } | Should -Throw '*aadUserIdColumn*'
@@ -568,6 +591,16 @@ Describe 'CustomDetection mapping helpers' {
                 $result = ConvertTo-CustomDetectionEntityMappings -EntityMappings @{ accounts = @(@{ nameColumn = 'AccountName' }); hosts = @(@{ deviceIdColumn = 'DeviceId' }) } -SkipIdentifierValidation -WarningVariable w -WarningAction SilentlyContinue
                 $result.Keys | Should -Not -Contain 'accounts'
                 "$w" | Should -Match 'AccountName'
+            }
+        }
+    }
+
+    Context 'ConvertFrom-CustomDetectionYamlToJson input hygiene' {
+
+        It 'Rejects an empty device group name' {
+            InModuleScope XDRConverter {
+                $yaml = @{ guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'; ruleName = 'r'; alertTitle = 't'; frequency = 'PT1H'; alertSeverity = 'Low'; alertDescription = 'd'; alertCategory = 'Execution'; queryText = 'q'; organizationalScope = @('', 'Servers') }
+                { ConvertFrom-CustomDetectionYamlToJson -YamlObject $yaml } | Should -Throw '*organizationalScope*empty*'
             }
         }
     }
@@ -702,6 +735,20 @@ Describe 'CustomDetection mapping helpers' {
     }
 
     Context 'ConvertTo-CustomDetectionAutomatedActions' {
+
+        It 'Rejects an action listed twice with the same fields' {
+            InModuleScope XDRConverter {
+                { ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = 'IsolateMachine' }, @{ actionType = 'IsolateMachine' }) } | Should -Throw '*IsolateMachine*twice*'
+            }
+        }
+
+        It 'Warns when an action type appears twice with different fields' {
+            InModuleScope XDRConverter {
+                $result = ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = 'IsolateMachine' }, @{ actionType = 'IsolateMachine'; additionalFields = @{ isolationType = 'Selective' } }) -WarningVariable w -WarningAction SilentlyContinue
+                $result.isolateDevices.Count | Should -Be 2
+                "$w" | Should -Match 'IsolateMachine'
+            }
+        }
 
         It 'Maps <ActionType> to <Collection> with default columns' -ForEach @(
             @{ ActionType = 'IsolateMachine'; Collection = 'isolateDevices'; Expected = @{ deviceIdColumn = 'DeviceId'; isolationType = 'full' } }

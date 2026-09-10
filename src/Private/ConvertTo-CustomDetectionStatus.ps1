@@ -25,7 +25,13 @@ function ConvertTo-CustomDetectionStatus {
 
     $enabledFromFlag = $null
     if ($null -ne $IsEnabled -and "$IsEnabled" -ne '') {
-        $enabledFromFlag = ($IsEnabled -eq $true) -or ("$IsEnabled" -eq 'true')
+        if ($IsEnabled -is [bool]) {
+            $enabledFromFlag = $IsEnabled
+        } elseif ("$IsEnabled" -in @('true', 'false')) {
+            $enabledFromFlag = ("$IsEnabled" -eq 'true')
+        } else {
+            throw "isEnabled '$IsEnabled' is not a boolean. Use true or false."
+        }
     }
 
     if (-not [string]::IsNullOrWhiteSpace($Status)) {

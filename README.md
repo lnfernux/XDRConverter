@@ -563,6 +563,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - A rule description or recommended action the file does not set is left unchanged and no longer reports an update on every run
 - Change detection is case-sensitive for text and column names, so a casing fix to a query or a column mapping now reaches the rule. Status, severity, tactic names and device group names are still compared without case
 - Legacy `impactedEntities` entries are grouped by identifier prefix, so `deviceId` and `remoteDeviceName` become two hosts instead of one host with another device's name, and the order of the entries no longer changes the result
+- Input the API rejects with an opaque message is rejected before the request with a named one: an empty device group name, a list as a column name, an action listed twice with the same fields, and an `isEnabled` value other than true or false. An action type listed twice with different fields produces a warning, since the rule keeps both
 - Bugs/issues or undocumented behavior identified while testing: 
    - `PT0S` and non-MITRE tactic names such as `SuspiciousActivity` are accepted on create
    - `autoDisabled` is rejected on write and is sent as `disabled`
