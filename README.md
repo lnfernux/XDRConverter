@@ -395,7 +395,7 @@ The Graph API deprecated several `detectionRule` properties and removes them on 
 
 ### Legacy entity identifiers
 
-Each `impactedEntities` entry becomes one column in the matching `entityMappings` collection. The column value is the identifier name. Entries of the same type merge into one item until a column is already taken. An account item needs `aadUserIdColumn`, `sidColumn`, `upnColumn`, or `nameColumn` together with a domain column. A legacy item that ends up with only a name or only a domain is dropped with a warning, which matches what the API did with the legacy property. An explicit `entityMappings.accounts` item with the same gap is an error, or a warning with `-SkipIdentifierValidation`.
+Each `impactedEntities` entry becomes one column in the matching `entityMappings` collection. The column value is the identifier name. Entries whose identifiers share a prefix, such as `accountSid` and `accountDomain`, merge into one item. A different prefix, such as `initiatingAccountName`, starts another item, so the order of the entries does not matter. An account item needs `aadUserIdColumn`, `sidColumn`, `upnColumn`, or `nameColumn` together with a domain column. A legacy item that ends up with only a name or only a domain is dropped with a warning, which matches what the API did with the legacy property. An explicit `entityMappings.accounts` item with the same gap is an error, or a warning with `-SkipIdentifierValidation`.
 
 | entityType | entityIdentifier | Collection and column |
 | --- | --- | --- |
@@ -562,6 +562,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - `frequency` is normalised to the form the API stores before the change detection runs, so a value such as `PT1440M` no longer reports an update on every run
 - A rule description or recommended action the file does not set is left unchanged and no longer reports an update on every run
 - Change detection is case-sensitive for text and column names, so a casing fix to a query or a column mapping now reaches the rule. Status, severity, tactic names and device group names are still compared without case
+- Legacy `impactedEntities` entries are grouped by identifier prefix, so `deviceId` and `remoteDeviceName` become two hosts instead of one host with another device's name, and the order of the entries no longer changes the result
 - Bugs/issues or undocumented behavior identified while testing: 
    - `PT0S` and non-MITRE tactic names such as `SuspiciousActivity` are accepted on create
    - `autoDisabled` is rejected on write and is sent as `disabled`

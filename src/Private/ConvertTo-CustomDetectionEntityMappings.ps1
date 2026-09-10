@@ -46,16 +46,36 @@ function ConvertTo-CustomDetectionEntityMappings {
 
     $legacyIdentifiers = Get-CustomDetectionLegacyIdentifierMap
 
+    # Identifiers that share a prefix describe one entity, so accountSid and accountDomain
+    # land in one item while initiatingAccountName starts another
+    function Get-IdentifierPrefix {
+        param([string]$Identifier)
+
+        foreach ($suffix in @('ObjectId', 'Sid', 'Upn', 'Name', 'Domain', 'Id')) {
+            if ($Identifier.Length -gt $suffix.Length -and $Identifier.EndsWith($suffix, [System.StringComparison]::OrdinalIgnoreCase)) {
+                return $Identifier.Substring(0, $Identifier.Length - $suffix.Length).ToLowerInvariant()
+            }
+        }
+        return $Identifier.ToLowerInvariant()
+    }
+
+    $groupItems = @{}
+
     function Add-MappingColumn {
-        param([System.Collections.Specialized.OrderedDictionary]$Result, [string]$Collection, [string]$Column, [string]$Value)
+        param([System.Collections.Specialized.OrderedDictionary]$Result, [string]$Collection, [string]$Column, [string]$Value, [string]$Group)
 
         if (-not $Result.Contains($Collection)) {
             $Result[$Collection] = [System.Collections.Generic.List[object]]::new()
         }
-        $target = $Result[$Collection] | Where-Object { -not $_.Contains($Column) } | Select-Object -First 1
+        $groupKey = "$Collection|$Group"
+        $target = $null
+        if ($groupItems.ContainsKey($groupKey) -and -not $groupItems[$groupKey].Contains($Column)) {
+            $target = $groupItems[$groupKey]
+        }
         if (-not $target) {
             $target = [ordered]@{}
             $Result[$Collection].Add($target)
+            $groupItems[$groupKey] = $target
         }
         $target[$Column] = $Value
     }
@@ -85,7 +105,7 @@ function ConvertTo-CustomDetectionEntityMappings {
                     }
                 }
                 $columnValue = $identifier.Substring(0, 1).ToUpperInvariant() + $identifier.Substring(1)
-                Add-MappingColumn -Result $result -Collection $columnType.Collection -Column $column -Value $columnValue
+                Add-MappingColumn -Result $result -Collection $columnType.Collection -Column $column -Value $columnValue -Group $identifier
                 continue
             }
 
@@ -120,7 +140,7 @@ function ConvertTo-CustomDetectionEntityMappings {
             }
 
             $columnValue = $canonical.Substring(0, 1).ToUpperInvariant() + $canonical.Substring(1)
-            Add-MappingColumn -Result $result -Collection $collection -Column $column -Value $columnValue
+            Add-MappingColumn -Result $result -Collection $collection -Column $column -Value $columnValue -Group (Get-IdentifierPrefix -Identifier $canonical)
         }
     } else {
         $mappings = ConvertTo-CustomDetectionHashtable -InputObject $EntityMappings
@@ -200,8 +220,21 @@ function ConvertTo-CustomDetectionEntityMappings {
         return $null
     }
 
+    # Columns follow the documented order, so the same entries give the same body whatever their order in the file
     foreach ($collection in @($result.Keys)) {
-        $result[$collection] = [object[]]$result[$collection].ToArray()
+        $items = [System.Collections.Generic.List[object]]::new()
+        $knownColumns = if ($collectionColumns.Contains($collection)) { $collectionColumns[$collection] } else { @() }
+        foreach ($item in $result[$collection]) {
+            $sortedItem = [ordered]@{}
+            foreach ($column in $knownColumns) {
+                if ($item.Contains($column)) { $sortedItem[$column] = $item[$column] }
+            }
+            foreach ($column in $item.Keys) {
+                if (-not $sortedItem.Contains($column)) { $sortedItem[$column] = $item[$column] }
+            }
+            $items.Add($sortedItem)
+        }
+        $result[$collection] = [object[]]$items.ToArray()
     }
 
     return $result

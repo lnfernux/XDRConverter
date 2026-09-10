@@ -304,6 +304,69 @@ Describe 'CustomDetection mapping helpers' {
             }
         }
 
+        It 'Keeps identifiers with different prefixes in separate host items' {
+            InModuleScope XDRConverter {
+                $result = ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @(
+                    @{ entityType = 'Machine'; entityIdentifier = 'DeviceId' }
+                    @{ entityType = 'Machine'; entityIdentifier = 'RemoteDeviceName' }
+                )
+                $result.hosts.Count | Should -Be 2
+                $result.hosts[0].deviceIdColumn | Should -Be 'DeviceId'
+                $result.hosts[0].Contains('nameColumn') | Should -BeFalse
+                $result.hosts[1].nameColumn | Should -Be 'RemoteDeviceName'
+            }
+        }
+
+        It 'Groups account identifiers by prefix regardless of order' {
+            InModuleScope XDRConverter {
+                $orderA = ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @(
+                    @{ entityType = 'User'; entityIdentifier = 'AccountName' }
+                    @{ entityType = 'User'; entityIdentifier = 'InitiatingAccountDomain' }
+                    @{ entityType = 'User'; entityIdentifier = 'InitiatingAccountName' }
+                    @{ entityType = 'User'; entityIdentifier = 'AccountDomain' }
+                )
+                $orderB = ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @(
+                    @{ entityType = 'User'; entityIdentifier = 'AccountName' }
+                    @{ entityType = 'User'; entityIdentifier = 'AccountDomain' }
+                    @{ entityType = 'User'; entityIdentifier = 'InitiatingAccountName' }
+                    @{ entityType = 'User'; entityIdentifier = 'InitiatingAccountDomain' }
+                )
+                ($orderA | ConvertTo-Json -Compress -Depth 5) | Should -Be ($orderB | ConvertTo-Json -Compress -Depth 5)
+                $orderA.accounts.Count | Should -Be 2
+                $orderA.accounts[0].nameColumn | Should -Be 'AccountName'
+                $orderA.accounts[0].ntDomainColumn | Should -Be 'AccountDomain'
+                $orderA.accounts[1].nameColumn | Should -Be 'InitiatingAccountName'
+                $orderA.accounts[1].ntDomainColumn | Should -Be 'InitiatingAccountDomain'
+            }
+        }
+
+        It 'Does not attach another account''s name to a sid' {
+            InModuleScope XDRConverter {
+                $result = ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @(
+                    @{ entityType = 'User'; entityIdentifier = 'AccountSid' }
+                    @{ entityType = 'User'; entityIdentifier = 'InitiatingAccountName' }
+                    @{ entityType = 'User'; entityIdentifier = 'AccountDomain' }
+                ) -WarningVariable w -WarningAction SilentlyContinue
+                $result.accounts.Count | Should -Be 1
+                $result.accounts[0].sidColumn | Should -Be 'AccountSid'
+                $result.accounts[0].ntDomainColumn | Should -Be 'AccountDomain'
+                $result.accounts[0].Contains('nameColumn') | Should -BeFalse
+                "$w" | Should -Match 'InitiatingAccountName'
+            }
+        }
+
+        It 'Groups a service principal id and name into one account item' {
+            InModuleScope XDRConverter {
+                $result = ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @(
+                    @{ entityType = 'User'; entityIdentifier = 'ServicePrincipalId' }
+                    @{ entityType = 'User'; entityIdentifier = 'ServicePrincipalName' }
+                )
+                $result.accounts.Count | Should -Be 1
+                $result.accounts[0].aadUserIdColumn | Should -Be 'ServicePrincipalId'
+                $result.accounts[0].nameColumn | Should -Be 'ServicePrincipalName'
+            }
+        }
+
         It 'Maps user identifiers to the matching account column' -ForEach @(
             @{ Identifier = 'InitiatingProcessAccountUpn'; Column = 'upnColumn' }
             @{ Identifier = 'initiatingProcessAccountSid'; Column = 'sidColumn' }
