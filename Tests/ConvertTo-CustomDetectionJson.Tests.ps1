@@ -88,7 +88,7 @@ queryText: DeviceEvents | where ActionType == "Test"
 
             # Validate the output is valid JSON
             $jsonContent = Get-Content -Path $tempJsonFile -Raw | ConvertFrom-Json
-            $jsonContent.id | Should -Be '81fb771a-c57e-41b8-9905-63dbf267c13f'
+            $jsonContent.id | Should -Be 'rule-81fb771a-c57e-41b8-9905-63dbf267c13f'
             $jsonContent.displayName | Should -Be 'PREFIX-TEST-Rule'
         }
 
@@ -181,7 +181,7 @@ queryText: DeviceEvents | where ActionType == "Test"
 
             $result = ConvertTo-CustomDetectionJson -InputFile $tempYamlFile | ConvertFrom-Json
 
-            $result.id | Should -Be '81fb771a-c57e-41b8-9905-63dbf267c13f'
+            $result.id | Should -Be 'rule-81fb771a-c57e-41b8-9905-63dbf267c13f'
             $result.displayName | Should -Be 'PREFIX-TEST-Rule'
             $result.status | Should -Be 'enabled'
             $result.schedule.frequency | Should -Be 'PT0S'
@@ -503,10 +503,19 @@ organizationalScope: []
         It 'Accepts id as an alias of guid and throws when both differ' {
             $aliasYaml = ($baseYaml -replace 'guid: .*', 'id: 81fb771a-c57e-41b8-9905-63dbf267c13f') + "`nfrequency: 1H"
             $aliasFile = New-YamlFile -Name 'id-alias.yaml' -Content $aliasYaml
-            (ConvertTo-CustomDetectionJson -InputFile $aliasFile | ConvertFrom-Json).id | Should -Be '81fb771a-c57e-41b8-9905-63dbf267c13f'
+            (ConvertTo-CustomDetectionJson -InputFile $aliasFile | ConvertFrom-Json).id | Should -Be 'rule-81fb771a-c57e-41b8-9905-63dbf267c13f'
 
             $bothFile = New-YamlFile -Name 'id-both.yaml' -Content ($baseYaml + "`nid: 00000000-0000-0000-0000-000000000000`nfrequency: 1H")
             { ConvertTo-CustomDetectionJson -InputFile $bothFile } | Should -Throw '*guid*'
+        }
+
+        It 'Accepts an id that already carries the rule prefix' {
+            $prefixedYaml = ($baseYaml -replace 'guid: .*', 'id: rule-81fb771a-c57e-41b8-9905-63dbf267c13f') + "`nfrequency: 1H"
+            $prefixedFile = New-YamlFile -Name 'id-prefixed.yaml' -Content $prefixedYaml
+            (ConvertTo-CustomDetectionJson -InputFile $prefixedFile | ConvertFrom-Json).id | Should -Be 'rule-81fb771a-c57e-41b8-9905-63dbf267c13f'
+
+            $sameFile = New-YamlFile -Name 'id-same.yaml' -Content ($baseYaml + "`nid: rule-81fb771a-c57e-41b8-9905-63dbf267c13f`nfrequency: 1H")
+            (ConvertTo-CustomDetectionJson -InputFile $sameFile | ConvertFrom-Json).id | Should -Be 'rule-81fb771a-c57e-41b8-9905-63dbf267c13f'
         }
 
         It 'Throws a clear message when alertSeverity is missing' {

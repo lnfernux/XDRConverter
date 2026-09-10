@@ -166,7 +166,8 @@ function Deploy-CustomDetection {
             }
             $jsonObj = ConvertFrom-CustomDetectionYamlToJson @convertParams
 
-            $detectorId = $jsonObj.id
+            # The body carries the client id rule-<guid>. The bare guid is the tag and the lookup key
+            $detectorId = "$($jsonObj.id)" -replace '^rule-', ''
             if (-not $detectorId) {
                 throw "The input file does not contain a guid. Cannot deploy."
             }
@@ -352,10 +353,8 @@ function Deploy-CustomDetection {
             } else {
                 # Create new rule via POST
                 if ($PSCmdlet.ShouldProcess("Rule '$ruleName'", 'Create detection rule')) {
-                    # The API assigns an id when none is sent and rejects one that starts with a digit, so the guid gets a prefix
-                    $createBody = ConvertTo-CustomDetectionHashtable -InputObject $jsonObj
-                    $createBody['id'] = "rule-$detectorId"
-                    $response = Invoke-MgGraphRequestWithRetry -Method POST -Uri $baseUri -Body $createBody
+                    # The API assigns an id when none is sent and rejects one that starts with a digit, hence the prefixed client id in the body
+                    $response = Invoke-MgGraphRequestWithRetry -Method POST -Uri $baseUri -Body $jsonObj
                     $newId = $response.id
                     Clear-CustomDetectionIdsCache
                     Write-Verbose "Created rule '$ruleName' (Id: $newId, Guid: $detectorId)."

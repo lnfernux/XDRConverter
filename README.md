@@ -373,7 +373,7 @@ The Graph API deprecated several `detectionRule` properties and removes them on 
 
 | YAML key | Required | Graph property | Notes |
 | --- | --- | --- | --- |
-| guid | Yes | `id` | Kept as `id` in the converted JSON and used as the description tag. Sent on create as `rule-<guid>`. Not required by the API in live testing, whatever the reference says. `id` is accepted as an alias |
+| guid | Yes | `id` | Becomes `id: rule-<guid>` in the converted JSON, which is the value the create request carries, and the bare guid is the description tag. Not required by the API in live testing, whatever the reference says. `id` is accepted as an alias, with or without the `rule-` prefix |
 | ruleName | Yes | `displayName` | |
 | description | No | `description` | Rule description shown in the portal rule list. A value the file does not set is left unchanged on the rule |
 | status | No | `status` | `enabled`, `disabled` or `autoDisabled`. Wins over `isEnabled` |
@@ -564,6 +564,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - Change detection is case-sensitive for text and column names, so a casing fix to a query or a column mapping now reaches the rule. Status, severity, tactic names and device group names are still compared without case
 - Legacy `impactedEntities` entries are grouped by identifier prefix, so `deviceId` and `remoteDeviceName` become two hosts instead of one host with another device's name, and the order of the entries no longer changes the result
 - Input the API rejects with an opaque message is rejected before the request with a named one: an empty device group name, a list as a column name, an action listed twice with the same fields, and an `isEnabled` value other than true or false. An action type listed twice with different fields produces a warning, since the rule keeps both
+- `ConvertTo-CustomDetectionJson` emits `id: rule-<guid>`, the value the create request carries. A YAML `id` may carry the prefix, and an exported rule keeps whatever follows the prefix as its guid
 - Bugs/issues or undocumented behavior identified while testing: 
    - `PT0S` and non-MITRE tactic names such as `SuspiciousActivity` are accepted on create
    - `autoDisabled` is rejected on write and is sent as `disabled`

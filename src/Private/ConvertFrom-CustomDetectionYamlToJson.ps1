@@ -58,12 +58,15 @@ function ConvertFrom-CustomDetectionYamlToJson {
         return $true
     }
 
+    # The guid and the id alias name the same rule, with or without the rule prefix the request carries
     $guid = Get-YamlValue -Key 'guid'
     $idAlias = Get-YamlValue -Key 'id'
-    if ((Test-HasValue $guid) -and (Test-HasValue $idAlias) -and ("$guid" -ne "$idAlias")) {
+    $bareGuid = if (Test-HasValue $guid) { "$guid".Trim() -replace '^rule-', '' } else { $null }
+    $bareAlias = if (Test-HasValue $idAlias) { "$idAlias".Trim() -replace '^rule-', '' } else { $null }
+    if ($bareGuid -and $bareAlias -and ($bareGuid -ne $bareAlias)) {
         throw "The guid '$guid' and id '$idAlias' differ. Use one of them."
     }
-    $ruleId = if (Test-HasValue $guid) { "$guid" } elseif (Test-HasValue $idAlias) { "$idAlias" } else { $null }
+    $ruleGuid = if ($bareGuid) { $bareGuid } elseif ($bareAlias) { $bareAlias } else { $null }
 
     $status = if ($PSBoundParameters.ContainsKey('SetEnabled')) {
         ConvertTo-CustomDetectionStatus -IsEnabled $SetEnabled
@@ -162,8 +165,8 @@ function ConvertFrom-CustomDetectionYamlToJson {
     }
 
     $jsonObj = [ordered]@{}
-    if ($ruleId) {
-        $jsonObj.id = $ruleId
+    if ($ruleGuid) {
+        $jsonObj.id = "rule-$ruleGuid"
     }
     $jsonObj.displayName = Get-YamlValue -Key 'ruleName'
     $jsonObj.status = $status

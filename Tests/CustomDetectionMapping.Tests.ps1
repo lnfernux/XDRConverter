@@ -614,6 +614,13 @@ Describe 'CustomDetection mapping helpers' {
             }
         }
 
+        It 'Get-CustomDetectionIdentity keeps a rule-prefixed id that is not a uuid' {
+            InModuleScope XDRConverter {
+                $rule = [PSCustomObject]@{ id = 'rule-office-encoded-powershell'; detectionAction = [PSCustomObject]@{ alertTemplate = [PSCustomObject]@{ description = 'no tag here' } } }
+                Get-CustomDetectionIdentity -Rule $rule | Should -Be 'office-encoded-powershell'
+            }
+        }
+
         It 'Get-CustomDetectionIdByDetectorId matches a rule-prefixed id' {
             InModuleScope XDRConverter {
                 Mock Assert-MgGraphConnection {}
