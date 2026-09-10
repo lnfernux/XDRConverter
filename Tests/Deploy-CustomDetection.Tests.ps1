@@ -991,4 +991,59 @@ queryText: DeviceEvents | take 1
             $help.Examples | Should -Not -BeNullOrEmpty
         }
     }
+
+    Context 'Direct lookup by client id' {
+
+        BeforeEach {
+            $script:directYaml = @"
+guid: 81fb771a-c57e-41b8-9905-63dbf267c13f
+ruleName: TEST-Direct
+isEnabled: true
+alertTitle: Direct Alert
+frequency: 1H
+alertSeverity: Low
+alertDescription: Direct description
+alertCategory: Execution
+queryText: DeviceEvents | take 1
+"@
+            $script:directFile = Join-Path TestDrive: 'direct.yaml'
+            $script:directYaml | Out-File -FilePath $script:directFile -Encoding UTF8
+            Mock Get-CustomDetectionIdByDescriptionTag { return $null } -ModuleName XDRConverter
+            Mock Invoke-MgGraphRequest { return @{ id = 'rule-81fb771a-c57e-41b8-9905-63dbf267c13f' } } -ModuleName XDRConverter
+        }
+
+        It 'Finds a rule through its client id when the list does not carry it' {
+            Mock Get-CustomDetection {
+                return @{
+                    id              = 'rule-81fb771a-c57e-41b8-9905-63dbf267c13f'
+                    displayName     = 'TEST-Direct'
+                    status          = 'enabled'
+                    queryCondition  = @{ queryText = 'DeviceEvents | take 2' }
+                    schedule        = @{ frequency = 'PT1H' }
+                    detectionAction = @{ alertTemplate = @{ title = 'Direct Alert'; description = 'Direct description [81fb771a-c57e-41b8-9905-63dbf267c13f]'; severity = 'low'; tactics = @(@{ tactic = 'Execution' }) } }
+                }
+            } -ModuleName XDRConverter -ParameterFilter { $DetectionId -eq 'rule-81fb771a-c57e-41b8-9905-63dbf267c13f' }
+
+            $result = Deploy-CustomDetection -InputFile $script:directFile -Confirm:$false
+            $result.Action | Should -Be 'Updated'
+            $result.RuleId | Should -Be 'rule-81fb771a-c57e-41b8-9905-63dbf267c13f'
+            Should -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -ParameterFilter { $Method -eq 'PATCH' } -Times 1 -Exactly
+            Should -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -ParameterFilter { $Method -eq 'POST' } -Times 0 -Exactly
+        }
+
+        It 'Creates the rule when the direct lookup answers not found' {
+            Mock Get-CustomDetection { throw 'Response status code does not indicate success: NotFound (Not Found).' } -ModuleName XDRConverter -ParameterFilter { $DetectionId -eq 'rule-81fb771a-c57e-41b8-9905-63dbf267c13f' }
+
+            $result = Deploy-CustomDetection -InputFile $script:directFile -Confirm:$false
+            $result.Action | Should -Be 'Created'
+            Should -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -ParameterFilter { $Method -eq 'POST' } -Times 1 -Exactly
+        }
+
+        It 'Fails when the direct lookup fails for another reason' {
+            Mock Get-CustomDetection { throw 'Response status code does not indicate success: Forbidden (Forbidden).' } -ModuleName XDRConverter -ParameterFilter { $DetectionId -eq 'rule-81fb771a-c57e-41b8-9905-63dbf267c13f' }
+
+            { Deploy-CustomDetection -InputFile $script:directFile -Confirm:$false -ErrorAction Stop } | Should -Throw '*Forbidden*'
+            Should -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -ParameterFilter { $Method -eq 'POST' } -Times 0 -Exactly
+        }
+    }
 }

@@ -15,7 +15,9 @@ function Deploy-CustomDetection {
         New rules are sent with the id "rule-<guid>", and the guid also travels
         in the description tag. The API assigns an id when none is sent, whatever
         the reference says, and rejects one that starts with a digit. The function finds an existing rule through that id, through the
-        tag, or, with -NoDescriptionTag, through the display name, and issues a
+        tag, or, with -NoDescriptionTag, through the display name. When the rule
+        list carries none of them it asks for "rule-<guid>" directly, since the
+        list can lag behind a create or a delete. A found rule gets a
         PATCH (update) instead of a POST (create). Before
         updating it compares the local rule against the remote version and skips the
         call when nothing changed.
@@ -290,12 +292,29 @@ function Deploy-CustomDetection {
                     Write-Verbose "Found matching detection by display name: Rule Id '$existingRuleId'."
                 }
             }
+            # The list can lag behind a create or a delete, so the client id is asked for directly before a create
+            if (-not $existingRuleId) {
+                try {
+                    $byId = Get-CustomDetection -DetectionId "rule-$detectorId" -ErrorAction SilentlyContinue
+                    if ($byId -and $byId.id) {
+                        $existingRuleId = $byId.id
+                        $existingRule = $byId
+                        Write-Verbose "Found the rule through its client id '$existingRuleId', which the list did not carry."
+                    }
+                } catch {
+                    $statusCode = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+                    if ($statusCode -ne 404 -and $_.Exception.Message -notmatch 'NotFound|\b404\b') {
+                        throw
+                    }
+                }
+            }
+
             if (-not $existingRuleId) {
                 Write-Verbose "The rule will be created."
             }
 
             # Fetch the full existing rule if we found one
-            if ($existingRuleId) {
+            if ($existingRuleId -and -not $existingRule) {
                 $existingRule = Get-CustomDetection -DetectionId $existingRuleId
             }
             #endregion

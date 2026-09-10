@@ -127,7 +127,7 @@ Get-CustomDetection | ConvertTo-CustomDetectionYaml -UseIdAsFilename
 
 ### Deploy-CustomDetection
 
-Creates or updates a Defender XDR custom detection rule from a YAML or JSON file via the Microsoft Graph API. New rules are sent with the rule id `rule-<guid>`, and the YAML `guid` also travels in the description tag. The id is not required. The Graph reference marks it as required, but live testing showed the API assigns an id when none is sent, and rejects one that starts with a digit. This is retested after the 2026-10-01 removal date. The cmdlet detects whether the rule already exists (by rule id, by description tag, or by display name with `-NoDescriptionTag`) and issues a PATCH (update) or POST (create) accordingly. Before updating, it compares the local rule against the remote version and skips the call when nothing changed. The comparison covers every managed property, including tactics, entity mappings, automated actions and device groups.
+Creates or updates a Defender XDR custom detection rule from a YAML or JSON file via the Microsoft Graph API. New rules are sent with the rule id `rule-<guid>`, and the YAML `guid` also travels in the description tag. The id is not required. The Graph reference marks it as required, but live testing showed the API assigns an id when none is sent, and rejects one that starts with a digit. This is retested after the 2026-10-01 removal date. The cmdlet detects whether the rule already exists (by rule id, by description tag, or by display name with `-NoDescriptionTag`, and by a direct request for `rule-<guid>` when the rule list carries none of them) and issues a PATCH (update) or POST (create) accordingly. Before updating, it compares the local rule against the remote version and skips the call when nothing changed. The comparison covers every managed property, including tactics, entity mappings, automated actions and device groups.
 
 #### Parameters
 
@@ -544,7 +544,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - Legacy YAML keys are still accepted and translated. When a legacy key and its replacement are both present, the replacement wins
 - New optional YAML keys: `description`, `status`, `tactics`, `entityMappings`, `customDetails` and ISO 8601 `frequency` values
 - All 16 automated action types and all 17 entity mapping collections are supported
-- New rules get the rule id `rule-<guid>`. Rules are found through that id, through the description tag, or through the display name with `-NoDescriptionTag`
+- New rules get the rule id `rule-<guid>`. Rules are found through that id, through the description tag, or through the display name with `-NoDescriptionTag`. When the rule list carries none of them, `rule-<guid>` is requested directly before a create, since the list can lag behind a create or a delete
 - `ConvertTo-CustomDetectionYaml` emits the current keys and upgrades rules that still carry the legacy properties
 - Change detection compares every managed property, so changes to actions, entity mappings, techniques or device groups trigger an update
 - The detection id cache is cleared after a create or delete
@@ -573,6 +573,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
    - An account entity mapping needs a key column or a name plus domain pair. A name-only mapping is rejected on write, while the legacy property was silently emptied
    - `schedule.frequency` is stored in a canonical form. `PT1440M` and `P1DT0H` come back as `P1D`, `PT0H` as `PT0S` and `PT90M` as `PT1H30M`. `P1W` is rejected as not an `Edm.Duration`
    - Entity mapping columns are matched against the query projection case-sensitively. `deviceid` is rejected when the query projects `DeviceId`
+   - The rule list can omit a rule for a long time after its id was deleted and created again, while a create with that id answers Conflict
 
 ### 1.4.1
 - Included Graph API error details in deployment failure messages for easier troubleshooting
