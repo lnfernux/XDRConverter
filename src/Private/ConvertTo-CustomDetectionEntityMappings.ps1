@@ -107,7 +107,9 @@ function ConvertTo-CustomDetectionEntityMappings {
                     }
                 }
                 $columnValue = $identifier.Substring(0, 1).ToUpperInvariant() + $identifier.Substring(1)
-                Add-MappingColumn -Result $result -Collection $columnType.Collection -Column $column -Value $columnValue -Group $identifier
+                # A registry key and a value name describe one registry value, so they share an item. Every other column type is one entity per identifier
+                $group = if ($columnType.Collection -eq 'registryValues') { 'registryValues' } else { $identifier }
+                Add-MappingColumn -Result $result -Collection $columnType.Collection -Column $column -Value $columnValue -Group $group
                 continue
             }
 

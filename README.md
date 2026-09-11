@@ -577,6 +577,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - The editor schema accepts the `rule-` prefix on `id` and lists the documented columns of every entity mapping collection, so it rejects the column names the converter rejects
 - A rule list request that times out is asked once more and then left alone for five minutes. In that window `Deploy-CustomDetection` looks a rule up by its client id only and reports a rule it cannot find instead of creating it, so a slow list costs one timeout per run instead of one per rule
 - `detectorId` is a YAML key. The YAML export writes the value the API assigned, the converter carries a value from the file into the request body, and `Get-CustomDetectionIdByDetectorId` matches it
+- A legacy `RegistryKey` and `RegistryValue` pair becomes one registry value item with both columns, since the two identifiers describe one entity
 - Bugs/issues or undocumented behavior identified while testing: 
    - `PT0S` and non-MITRE tactic names such as `SuspiciousActivity` are accepted on create
    - `autoDisabled` is rejected on write and is sent as `disabled`

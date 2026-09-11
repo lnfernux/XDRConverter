@@ -565,6 +565,33 @@ Describe 'CustomDetection mapping helpers' {
         }
     }
 
+    Context 'ConvertTo-CustomDetectionEntityMappings registry pairs' {
+
+        It 'Puts a legacy RegistryKey and RegistryValue into one registry value item' {
+            InModuleScope XDRConverter {
+                $result = ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @(
+                    @{ entityType = 'RegistryKey'; entityIdentifier = 'RegistryKey' },
+                    @{ entityType = 'RegistryValue'; entityIdentifier = 'RegistryValueName' }
+                )
+                @($result.registryValues).Count | Should -Be 1
+                $result.registryValues[0].keyColumn | Should -Be 'RegistryKey'
+                $result.registryValues[0].valueNameColumn | Should -Be 'RegistryValueName'
+            }
+        }
+
+        It 'Starts a second registry value item when a column repeats' {
+            InModuleScope XDRConverter {
+                $result = ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @(
+                    @{ entityType = 'RegistryKey'; entityIdentifier = 'RegistryKey' },
+                    @{ entityType = 'RegistryValue'; entityIdentifier = 'RegistryValueName' },
+                    @{ entityType = 'RegistryKey'; entityIdentifier = 'PreviousRegistryKey' }
+                )
+                @($result.registryValues).Count | Should -Be 2
+                $result.registryValues[1].keyColumn | Should -Be 'PreviousRegistryKey'
+            }
+        }
+    }
+
     Context 'ConvertTo-CustomDetectionEntityMappings input hygiene' {
 
         It 'Rejects plain-string impacted entity and mapping items' {
