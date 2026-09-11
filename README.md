@@ -579,6 +579,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - `detectorId` is a YAML key. The YAML export writes the value the API assigned, the converter carries a value from the file into the request body, and `Get-CustomDetectionIdByDetectorId` matches it
 - A legacy `RegistryKey` and `RegistryValue` pair becomes one registry value item with both columns, since the two identifiers describe one entity
 - `Remove-CustomDetection -DetectorId` and `-DescriptionTag` ask for the client id `rule-<guid>` directly when the list does not carry the rule, as the deploy does before a create
+- A description tag carried by more than one rule produces a warning naming the rules, and the first one is used. It used to hand the deploy a list of ids, which stopped it with a type error
 - Bugs/issues or undocumented behavior identified while testing: 
    - `PT0S` and non-MITRE tactic names such as `SuspiciousActivity` are accepted on create
    - `autoDisabled` is rejected on write and is sent as `disabled`
