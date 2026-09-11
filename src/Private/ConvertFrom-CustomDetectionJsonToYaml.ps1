@@ -125,7 +125,7 @@ function ConvertFrom-CustomDetectionJsonToYaml {
     } else {
         $impactedAssets = Get-CustomDetectionValue -Object $JsonObject -Path 'detectionAction.alertTemplate.impactedAssets'
         if (Test-CustomDetectionValue $impactedAssets) {
-            $entityMappings = ConvertFrom-CustomDetectionEntityMappings -ImpactedAssets @($impactedAssets)
+            $entityMappings = ConvertFrom-CustomDetectionEntityMappings -ImpactedAssets @($impactedAssets) -ValidateIdentifiers:$ValidateIdentifiers
         }
     }
     if ($entityMappings) {

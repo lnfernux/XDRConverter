@@ -60,6 +60,9 @@ function ConvertTo-CustomDetectionAutomatedActions {
         }
 
         $additional = ConvertTo-CustomDetectionHashtable -InputObject $map['additionalFields']
+        if ($null -ne $map['additionalFields'] -and $null -eq $additional) {
+            throw "The additionalFields value of action '$actionType' must be a mapping of field name to column name."
+        }
         if ($additional) {
             # Fields are matched without case and written under their documented name
             $fields = [ordered]@{}

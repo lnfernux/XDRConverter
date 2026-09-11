@@ -24,7 +24,7 @@
         "id": {
             "type": "string",
             "pattern": "^(rule-)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
-            "description": "Alias of guid, with or without the rule- prefix. When both are present they must be equal"
+            "description": "Alias of guid, with or without the rule- prefix. A file that carries both with different values is rejected on conversion"
         },
         "detectorId": {
             "$ref": "#/definitions/uuid",
@@ -186,6 +186,7 @@
             "description": "Device group names the rule applies to. An empty list means all devices",
             "items": {
                 "type": "string",
+                "minLength": 1,
                 "description": "Device group name"
             },
             "uniqueItems": true
@@ -245,9 +246,17 @@
                                 "sidColumn": { "$ref": "#/definitions/columnName" },
                                 "upnColumn": { "$ref": "#/definitions/columnName" },
                                 "upnSuffixColumn": { "$ref": "#/definitions/columnName" }
-                        }
+                        },
+                        "anyOf": [
+                            { "required": [ "aadUserIdColumn" ] },
+                            { "required": [ "sidColumn" ] },
+                            { "required": [ "upnColumn" ] },
+                            { "required": [ "nameColumn", "ntDomainColumn" ] },
+                            { "required": [ "nameColumn", "dnsDomainColumn" ] },
+                            { "required": [ "nameColumn", "upnSuffixColumn" ] }
+                        ]
                     },
-                    "description": "Columns: aadUserIdColumn, dnsDomainColumn, nameColumn, ntDomainColumn, sidColumn, upnColumn, upnSuffixColumn"
+                    "description": "Columns: aadUserIdColumn, dnsDomainColumn, nameColumn, ntDomainColumn, sidColumn, upnColumn, upnSuffixColumn. An account needs a key column, or a name column together with a domain column"
                 },
                 "amazonResources": {
                     "type": "array",
@@ -561,7 +570,108 @@
                 "required": [
                     "actionType"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "allOf": [
+                    {
+                        "if": {
+                            "required": [ "actionType" ],
+                            "properties": { "actionType": { "enum": [ "IsolateMachine" ] } }
+                        },
+                        "then": {
+                            "properties": {
+                                "additionalFields": {
+                                    "properties": { "deviceIdColumn": {}, "isolationType": {} },
+                                    "additionalProperties": false
+                                }
+                            }
+                        }
+                    },
+                    {
+                        "if": {
+                            "required": [ "actionType" ],
+                            "properties": { "actionType": { "enum": [ "CollectInvestigationPackage", "RunAntivirusScan", "InitiateInvestigation", "RestrictAppExecution" ] } }
+                        },
+                        "then": {
+                            "properties": {
+                                "additionalFields": {
+                                    "properties": { "deviceIdColumn": {} },
+                                    "additionalProperties": false
+                                }
+                            }
+                        }
+                    },
+                    {
+                        "if": {
+                            "required": [ "actionType" ],
+                            "properties": { "actionType": { "enum": [ "StopAndQuarantineFile" ] } }
+                        },
+                        "then": {
+                            "properties": {
+                                "additionalFields": {
+                                    "properties": { "deviceIdColumn": {}, "sha1Column": {} },
+                                    "additionalProperties": false
+                                }
+                            }
+                        }
+                    },
+                    {
+                        "if": {
+                            "required": [ "actionType" ],
+                            "properties": { "actionType": { "enum": [ "AllowFile", "BlockFile" ] } }
+                        },
+                        "then": {
+                            "properties": {
+                                "additionalFields": {
+                                    "properties": { "sha1Column": {}, "sha256Column": {}, "deviceGroupNames": {} },
+                                    "additionalProperties": false,
+                                    "not": { "required": [ "sha1Column", "sha256Column" ] }
+                                }
+                            }
+                        }
+                    },
+                    {
+                        "if": {
+                            "required": [ "actionType" ],
+                            "properties": { "actionType": { "enum": [ "DisableUser", "ForceUserPasswordReset" ] } }
+                        },
+                        "then": {
+                            "properties": {
+                                "additionalFields": {
+                                    "properties": { "accountSidColumn": {} },
+                                    "additionalProperties": false
+                                }
+                            }
+                        }
+                    },
+                    {
+                        "if": {
+                            "required": [ "actionType" ],
+                            "properties": { "actionType": { "enum": [ "MarkUserAsCompromised" ] } }
+                        },
+                        "then": {
+                            "properties": {
+                                "additionalFields": {
+                                    "properties": { "accountObjectIdColumn": {} },
+                                    "additionalProperties": false
+                                }
+                            }
+                        }
+                    },
+                    {
+                        "if": {
+                            "required": [ "actionType" ],
+                            "properties": { "actionType": { "enum": [ "HardDeleteEmail", "SoftDeleteEmail", "MoveEmailToInbox", "MoveEmailToJunk", "MoveEmailToDeletedItems" ] } }
+                        },
+                        "then": {
+                            "properties": {
+                                "additionalFields": {
+                                    "properties": { "networkMessageIdColumn": {}, "recipientColumn": {} },
+                                    "additionalProperties": false
+                                }
+                            }
+                        }
+                    }
+                ]
             }
         },
         "queryText": {

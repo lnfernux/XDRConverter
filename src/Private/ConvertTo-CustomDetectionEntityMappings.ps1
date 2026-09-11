@@ -62,14 +62,22 @@ function ConvertTo-CustomDetectionEntityMappings {
     $groupItems = @{}
 
     function Add-MappingColumn {
-        param([System.Collections.Specialized.OrderedDictionary]$Result, [string]$Collection, [string]$Column, [string]$Value, [string]$Group)
+        param([System.Collections.Specialized.OrderedDictionary]$Result, [string]$Collection, [string]$Column, [string]$Value, [string]$Group, [switch]$Pair)
 
         if (-not $Result.Contains($Collection)) {
             $Result[$Collection] = [System.Collections.Generic.List[object]]::new()
         }
         $groupKey = "$Collection|$Group"
         $target = $null
-        if ($groupItems.ContainsKey($groupKey) -and -not $groupItems[$groupKey].Contains($Column)) {
+        if ($Pair) {
+            # The column joins the first item that does not carry it yet, so the same entries pair the same way whatever their order
+            foreach ($item in $Result[$Collection]) {
+                if (-not $item.Contains($Column)) {
+                    $target = $item
+                    break
+                }
+            }
+        } elseif ($groupItems.ContainsKey($groupKey) -and -not $groupItems[$groupKey].Contains($Column)) {
             $target = $groupItems[$groupKey]
         }
         if (-not $target) {
@@ -107,9 +115,9 @@ function ConvertTo-CustomDetectionEntityMappings {
                     }
                 }
                 $columnValue = $identifier.Substring(0, 1).ToUpperInvariant() + $identifier.Substring(1)
-                # A registry key and a value name describe one registry value, so they share an item. Every other column type is one entity per identifier
-                $group = if ($columnType.Collection -eq 'registryValues') { 'registryValues' } else { $identifier }
-                Add-MappingColumn -Result $result -Collection $columnType.Collection -Column $column -Value $columnValue -Group $group
+                # A registry key and a value name describe one registry value, so they pair into one item. Every other column type is one entity per identifier
+                $pair = $columnType.Collection -eq 'registryValues'
+                Add-MappingColumn -Result $result -Collection $columnType.Collection -Column $column -Value $columnValue -Group $identifier -Pair:$pair
                 continue
             }
 
@@ -171,7 +179,7 @@ function ConvertTo-CustomDetectionEntityMappings {
                 $columns = Get-CustomDetectionPopulatedEntry -Map $item
                 foreach ($columnKey in @($columns.Keys)) {
                     $value = $columns[$columnKey]
-                    if ($value -isnot [string] -and $value -is [System.Collections.IEnumerable]) {
+                    if ($value -isnot [string]) {
                         throw "Column '$columnKey' of entity mapping '$collection' must be a single column name."
                     }
                     if ($collectionColumns.Contains($collection) -and $columnKey -notin $collectionColumns[$collection]) {
