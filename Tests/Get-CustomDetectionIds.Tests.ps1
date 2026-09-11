@@ -234,6 +234,62 @@ Describe 'Get-CustomDetectionIds' {
         }
     }
 
+    Context 'List timeouts' {
+        BeforeEach {
+            Mock Assert-MgGraphConnection {} -ModuleName XDRConverter
+            InModuleScope XDRConverter {
+                $script:DetectionIdsCache = @{ Data = $null; ExpiresAt = [datetime]::MinValue; FailedAt = $null }
+                $script:ListCalls = 0
+            }
+        }
+
+        It 'Retries the list once when the first call times out' {
+            Mock Invoke-MgGraphRequestWithRetry {
+                $script:ListCalls++
+                if ($script:ListCalls -eq 1) { throw 'The request was canceled due to the configured HttpClient.Timeout of 300 seconds elapsing.' }
+                return @{ value = @(@{ id = 'rule-1'; displayName = 'A'; detectionAction = @{ alertTemplate = @{ description = 'x' } } }) }
+            } -ModuleName XDRConverter
+
+            $result = Get-CustomDetectionIds -WarningAction SilentlyContinue
+            @($result).Count | Should -Be 1
+            Should -Invoke Invoke-MgGraphRequestWithRetry -ModuleName XDRConverter -Times 2 -Exactly
+        }
+
+        It 'Fails fast for five minutes after the retry times out as well' {
+            Mock Invoke-MgGraphRequestWithRetry { throw 'The request was canceled due to the configured HttpClient.Timeout of 300 seconds elapsing.' } -ModuleName XDRConverter
+
+            { Get-CustomDetectionIds -WarningAction SilentlyContinue -ErrorAction SilentlyContinue } | Should -Throw '*HttpClient.Timeout*'
+            Should -Invoke Invoke-MgGraphRequestWithRetry -ModuleName XDRConverter -Times 2 -Exactly
+            { Get-CustomDetectionIds -WarningAction SilentlyContinue -ErrorAction SilentlyContinue } | Should -Throw '*rule list is unavailable*'
+            Should -Invoke Invoke-MgGraphRequestWithRetry -ModuleName XDRConverter -Times 2 -Exactly
+        }
+
+        It 'Asks the API again with -Force inside the window' {
+            InModuleScope XDRConverter { $script:DetectionIdsCache.FailedAt = [datetime]::UtcNow }
+            Mock Invoke-MgGraphRequestWithRetry { return @{ value = @(@{ id = 'rule-1'; displayName = 'A'; detectionAction = @{ alertTemplate = @{ description = 'x' } } }) } } -ModuleName XDRConverter
+
+            @(Get-CustomDetectionIds -Force).Count | Should -Be 1
+            Should -Invoke Invoke-MgGraphRequestWithRetry -ModuleName XDRConverter -Times 1 -Exactly
+            InModuleScope XDRConverter { $script:DetectionIdsCache.FailedAt | Should -BeNullOrEmpty }
+        }
+
+        It 'Asks the API again once the window has passed' {
+            InModuleScope XDRConverter { $script:DetectionIdsCache.FailedAt = [datetime]::UtcNow.AddMinutes(-6) }
+            Mock Invoke-MgGraphRequestWithRetry { return @{ value = @() } } -ModuleName XDRConverter
+
+            Get-CustomDetectionIds | Out-Null
+            Should -Invoke Invoke-MgGraphRequestWithRetry -ModuleName XDRConverter -Times 1 -Exactly
+        }
+
+        It 'Does not retry or open the window for a failure that is not a timeout' {
+            Mock Invoke-MgGraphRequestWithRetry { throw 'Response status code does not indicate success: Forbidden (Forbidden).' } -ModuleName XDRConverter
+
+            { Get-CustomDetectionIds -ErrorAction SilentlyContinue } | Should -Throw '*Forbidden*'
+            Should -Invoke Invoke-MgGraphRequestWithRetry -ModuleName XDRConverter -Times 1 -Exactly
+            InModuleScope XDRConverter { $script:DetectionIdsCache.FailedAt | Should -BeNullOrEmpty }
+        }
+    }
+
     Context 'Parameter Validation' {
         It 'Should have CacheTtlMinutes parameter' {
             $cmd = Get-Command Get-CustomDetectionIds

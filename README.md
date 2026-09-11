@@ -127,7 +127,7 @@ Get-CustomDetection | ConvertTo-CustomDetectionYaml -UseIdAsFilename
 
 ### Deploy-CustomDetection
 
-Creates or updates a Defender XDR custom detection rule from a YAML or JSON file via the Microsoft Graph API. New rules are sent with the rule id `rule-<guid>`, and the YAML `guid` also travels in the description tag. The cmdlet requires a guid in the file. The API itself does not. The Graph reference marks the id as required, but live testing showed the API assigns one when none is sent and rejects one that starts with a digit. The cmdlet detects whether the rule already exists (by rule id, by description tag, or by display name with `-NoDescriptionTag`, and by a direct request for `rule-<guid>` when the rule list carries none of them) and issues a PATCH (update) or POST (create) accordingly. Before updating, it compares the local rule against the remote version and skips the call when nothing changed. The comparison covers every managed property, including tactics, entity mappings, automated actions and device groups.
+Creates or updates a Defender XDR custom detection rule from a YAML or JSON file via the Microsoft Graph API. New rules are sent with the rule id `rule-<guid>`, and the YAML `guid` also travels in the description tag. The cmdlet requires a guid in the file. The API itself does not. The Graph reference marks the id as required, but live testing showed the API assigns one when none is sent and rejects one that starts with a digit. The cmdlet detects whether the rule already exists (by rule id, by description tag, or by display name with `-NoDescriptionTag`, and by a direct request for `rule-<guid>` when the rule list carries none of them) and issues a PATCH (update) or POST (create) accordingly. When the rule list does not answer, the rule is looked up by its client id only, and a rule not found that way is reported instead of created. Before updating, it compares the local rule against the remote version and skips the call when nothing changed. The comparison covers every managed property, including tactics, entity mappings, automated actions and device groups.
 
 #### Parameters
 
@@ -267,7 +267,7 @@ Get-CustomDetection -DetectionId '81fb771a-c57e-41b8-9905-63dbf267c13f' |
 
 ### Get-CustomDetectionIds
 
-Lists detection rule IDs with their description tags and tag prefixes. Results are cached for the specified duration (default: 60 minutes) to reduce API calls. The cache is cleared automatically after a rule is created or deleted.
+Lists detection rule IDs with their description tags and tag prefixes. Results are cached for the specified duration (default: 60 minutes) to reduce API calls. The cache is cleared automatically after a rule is created or deleted. A list request that times out is asked once more. After a failed retry the cmdlet throws at once for five minutes, unless `-Force` is set.
 
 The output includes:
 - **Id**: The detection rule ID
@@ -574,6 +574,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - `Get-CustomDetectionIdByDetectorId` falls back to the description tag, so `Remove-CustomDetection -DetectorId` finds a rule created before the rule id carried the guid
 - Action fields in `additionalFields` are written under their documented name whatever the casing in the file, so `Sha256Column` no longer reports an update on every run
 - The editor schema accepts the `rule-` prefix on `id` and lists the documented columns of every entity mapping collection, so it rejects the column names the converter rejects
+- A rule list request that times out is asked once more and then left alone for five minutes. In that window `Deploy-CustomDetection` looks a rule up by its client id only and reports a rule it cannot find instead of creating it, so a slow list costs one timeout per run instead of one per rule
 - Bugs/issues or undocumented behavior identified while testing: 
    - `PT0S` and non-MITRE tactic names such as `SuspiciousActivity` are accepted on create
    - `autoDisabled` is rejected on write and is sent as `disabled`
@@ -585,6 +586,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
    - `schedule.frequency` is stored in a canonical form. `PT1440M` and `P1DT0H` come back as `P1D`, `PT0H` as `PT0S` and `PT90M` as `PT1H30M`. `P1W` is rejected as not an `Edm.Duration`
    - Entity mapping columns are matched against the query projection case-sensitively. `deviceid` is rejected when the query projects `DeviceId`
    - The rule list can omit a rule for a long time after its id was deleted and created again, while a create with that id answers Conflict
+   - The list request can exceed the Graph client's 300 second timeout several times in a row. Four and five in a row were seen in one morning
 
 ### 1.4.1
 - Included Graph API error details in deployment failure messages for easier troubleshooting

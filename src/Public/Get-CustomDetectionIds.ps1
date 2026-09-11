@@ -63,18 +63,39 @@ function Get-CustomDetectionIds {
             return $script:DetectionIdsCache.Data
         }
 
+        # After a timeout and a failed retry the list is not asked again for five minutes, so a run does not pay the timeout once per rule
+        $failedAt = $script:DetectionIdsCache.FailedAt
+        if (-not $Force -and $failedAt -and ([datetime]::UtcNow - $failedAt) -lt [timespan]::FromMinutes(5)) {
+            throw "The rule list is unavailable since $($failedAt.ToString('HH:mm:ss')) UTC and is asked again five minutes later."
+        }
+
         try {
             # Query the Microsoft Graph API with pagination support. The projection names only properties that outlive the 2026-10-01 removals
-            $uri = 'https://graph.microsoft.com/beta/security/rules/detectionRules?$select=id,displayName,detectionAction'
-            $allValues = [System.Collections.Generic.List[object]]::new()
+            $listUri = 'https://graph.microsoft.com/beta/security/rules/detectionRules?$select=id,displayName,detectionAction'
+            $retried = $false
 
-            do {
-                $response = Invoke-MgGraphRequestWithRetry -Method GET -Uri $uri
-                if ($response.value) {
-                    $allValues.AddRange([object[]]$response.value)
+            while ($true) {
+                try {
+                    $allValues = [System.Collections.Generic.List[object]]::new()
+                    $uri = $listUri
+                    do {
+                        $response = Invoke-MgGraphRequestWithRetry -Method GET -Uri $uri
+                        if ($response.value) {
+                            $allValues.AddRange([object[]]$response.value)
+                        }
+                        $uri = $response.'@odata.nextLink'
+                    } while ($uri)
+                    break
+                } catch {
+                    if (-not (Test-CustomDetectionListFailure -ErrorRecord $_)) { throw }
+                    if ($retried) {
+                        $script:DetectionIdsCache.FailedAt = [datetime]::UtcNow
+                        throw
+                    }
+                    $retried = $true
+                    Write-Warning 'The rule list timed out. It is asked once more.'
                 }
-                $uri = $response.'@odata.nextLink'
-            } while ($uri)
+            }
 
             if ($allValues.Count -eq 0) {
                 $result = @()
@@ -104,6 +125,7 @@ function Get-CustomDetectionIds {
             # Update the cache
             $script:DetectionIdsCache.Data = $result
             $script:DetectionIdsCache.ExpiresAt = [datetime]::UtcNow.AddMinutes($CacheTtlMinutes)
+            $script:DetectionIdsCache.FailedAt = $null
 
             return $result
         } catch {

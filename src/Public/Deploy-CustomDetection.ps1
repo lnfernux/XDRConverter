@@ -267,28 +267,37 @@ function Deploy-CustomDetection {
 
             #region Discover existing rule
             $existingRule = $null
+            $existingRuleId = $null
+            $listUnavailable = $false
 
-            # Try by rule id first (cached)
-            $existingRuleId = Get-CustomDetectionIdByDetectorId -DetectorId $detectorId -ErrorAction SilentlyContinue
+            # The three lookups read the rule list. When it does not answer, the client id is the only lookup left
+            try {
+                # Try by rule id first (cached)
+                $existingRuleId = Get-CustomDetectionIdByDetectorId -DetectorId $detectorId -ErrorAction SilentlyContinue
 
-            # Fallback: scan all rules for UUID tag in description
-            if (-not $existingRuleId) {
-                Write-Verbose "Guid '$detectorId' not found by ID lookup. Scanning descriptions for UUID tag..."
-                $existingRuleId = Get-CustomDetectionIdByDescriptionTag -DescriptionTag $detectorId -WarningAction SilentlyContinue
-                if ($existingRuleId) {
-                    Write-Verbose "Found matching detection by description tag: Rule Id '$existingRuleId'."
-                } else {
-                    Write-Verbose "No existing rule carries the tag '$detectorId'."
+                # Fallback: scan all rules for UUID tag in description
+                if (-not $existingRuleId) {
+                    Write-Verbose "Guid '$detectorId' not found by ID lookup. Scanning descriptions for UUID tag..."
+                    $existingRuleId = Get-CustomDetectionIdByDescriptionTag -DescriptionTag $detectorId -WarningAction SilentlyContinue
+                    if ($existingRuleId) {
+                        Write-Verbose "Found matching detection by description tag: Rule Id '$existingRuleId'."
+                    } else {
+                        Write-Verbose "No existing rule carries the tag '$detectorId'."
+                    }
                 }
-            }
 
-            # A rule without the client id and without a tag can only be matched by name. The API keeps names unique
-            if (-not $existingRuleId -and $NoDescriptionTag) {
-                $byName = Get-CustomDetectionIds | Where-Object { $_.DisplayName -eq $jsonObj.displayName } | Select-Object -First 1
-                if ($byName) {
-                    $existingRuleId = $byName.Id
-                    Write-Warning "Rule '$($jsonObj.displayName)' was matched by its display name alone. Without the tag a renamed file creates a new rule and leaves this one behind."
+                # A rule without the client id and without a tag can only be matched by name. The API keeps names unique
+                if (-not $existingRuleId -and $NoDescriptionTag) {
+                    $byName = Get-CustomDetectionIds | Where-Object { $_.DisplayName -eq $jsonObj.displayName } | Select-Object -First 1
+                    if ($byName) {
+                        $existingRuleId = $byName.Id
+                        Write-Warning "Rule '$($jsonObj.displayName)' was matched by its display name alone. Without the tag a renamed file creates a new rule and leaves this one behind."
+                    }
                 }
+            } catch {
+                if (-not (Test-CustomDetectionListFailure -ErrorRecord $_)) { throw }
+                $listUnavailable = $true
+                Write-Warning "The rule list did not answer. Rule '$($jsonObj.displayName)' is looked up by its client id only."
             }
             # The list can lag behind a create or a delete, so the client id is asked for directly before a create
             if (-not $existingRuleId) {
@@ -307,6 +316,9 @@ function Deploy-CustomDetection {
                 }
             }
 
+            if (-not $existingRuleId -and $listUnavailable) {
+                throw "The rule list is unavailable and rule '$($jsonObj.displayName)' was not found by its client id. Nothing was created."
+            }
             if (-not $existingRuleId) {
                 Write-Verbose "The rule will be created."
             }

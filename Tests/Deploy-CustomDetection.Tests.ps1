@@ -1044,6 +1044,55 @@ queryText: DeviceEvents | new
         }
     }
 
+    Context 'List unavailable' {
+        BeforeEach {
+            $script:guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'
+            Mock Get-CustomDetectionIdByDetectorId { throw 'The request was canceled due to the configured HttpClient.Timeout of 300 seconds elapsing.' } -ModuleName XDRConverter
+            Mock Get-CustomDetectionIdByDescriptionTag { return $null } -ModuleName XDRConverter
+            Mock Invoke-MgGraphRequest { return @{ id = 'new-id' } } -ModuleName XDRConverter
+            $testYaml = @"
+guid: $script:guid
+ruleName: TEST-ListDown
+isEnabled: true
+alertTitle: Test
+frequency: 0
+alertSeverity: Medium
+alertDescription: Test
+alertCategory: DefenseEvasion
+queryText: DeviceEvents | new
+"@
+            $script:listDownFile = Join-Path TestDrive: 'list-down.yaml'
+            $testYaml | Out-File -FilePath $script:listDownFile -Encoding UTF8
+        }
+
+        It 'Updates a rule found by its client id while the list is unavailable' {
+            Mock Get-CustomDetection {
+                return @{
+                    id              = "rule-$script:guid"
+                    displayName     = 'TEST-ListDown'
+                    status          = 'enabled'
+                    detectionAction = @{ alertTemplate = @{ title = 'Old'; description = "Test [$script:guid]"; severity = 'medium'; tactics = @(@{ tactic = 'DefenseEvasion' }) } }
+                    queryCondition  = @{ queryText = 'DeviceEvents | old' }
+                    schedule        = @{ frequency = 'PT0S' }
+                }
+            } -ModuleName XDRConverter -ParameterFilter { $DetectionId -eq "rule-$script:guid" }
+
+            $result = Deploy-CustomDetection -InputFile $script:listDownFile -Confirm:$false -WarningVariable warning -WarningAction SilentlyContinue
+            $result.Action | Should -Be 'Updated'
+            "$warning" | Should -Match 'rule list'
+            Should -Invoke Get-CustomDetectionIdByDescriptionTag -ModuleName XDRConverter -Times 0 -Exactly
+            Should -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -Times 1 -Exactly -ParameterFilter { $Method -eq 'PATCH' }
+            Should -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -Times 0 -Exactly -ParameterFilter { $Method -eq 'POST' }
+        }
+
+        It 'Stops without creating when the list is unavailable and the client id is not found' {
+            Mock Get-CustomDetection { throw 'Response status code does not indicate success: NotFound (Not Found).' } -ModuleName XDRConverter -ParameterFilter { $DetectionId -eq "rule-$script:guid" }
+
+            { Deploy-CustomDetection -InputFile $script:listDownFile -Confirm:$false -WarningAction SilentlyContinue } | Should -Throw '*Nothing was created*'
+            Should -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -Times 0 -Exactly -ParameterFilter { $Method -eq 'POST' }
+        }
+    }
+
     Context 'MITRE Technique Validation' {
 
         It 'Should have SkipMitreTechniqueValidation switch parameter' {

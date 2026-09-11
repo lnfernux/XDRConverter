@@ -10,8 +10,10 @@ function Clear-CustomDetectionIdsCache {
     [CmdletBinding()]
     param()
 
+    # The time of the last list failure survives, a create or a delete says nothing about the list
     $script:DetectionIdsCache = @{
         Data      = $null
         ExpiresAt = [datetime]::MinValue
+        FailedAt  = $script:DetectionIdsCache.FailedAt
     }
 }
