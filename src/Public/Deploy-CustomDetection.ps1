@@ -360,7 +360,9 @@ function Deploy-CustomDetection {
                     # The API assigns an id when none is sent and rejects one that starts with a digit, hence the prefixed client id in the body
                     $response = Invoke-MgGraphRequestWithRetry -Method POST -Uri $baseUri -Body $jsonObj
                     $newId = $response.id
-                    Clear-CustomDetectionIdsCache
+                    # The created rule joins the cached list, so the next rule does not ask the list again
+                    $created = [ordered]@{ id = $newId; detectorId = $response.detectorId; displayName = $jsonObj.displayName; detectionAction = $jsonObj.detectionAction }
+                    Add-CustomDetectionIdsCacheEntry -Entry (ConvertTo-CustomDetectionIdEntry -Rule $created)
                     Write-Verbose "Created rule '$ruleName' (Id: $newId, Guid: $detectorId)."
 
                     [PSCustomObject]@{

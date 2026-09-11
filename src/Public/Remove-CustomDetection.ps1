@@ -113,7 +113,7 @@ function Remove-CustomDetection {
             if ($PSCmdlet.ShouldProcess("Rule '$ruleName' (Id: $ruleId)", 'Delete detection rule')) {
                 $uri = "$baseUri/$ruleId"
                 Invoke-MgGraphRequestWithRetry -Method DELETE -Uri $uri | Out-Null
-                Clear-CustomDetectionIdsCache
+                Clear-CustomDetectionIdsCacheEntry -Id $ruleId
                 Write-Verbose "Deleted rule '$ruleName' (Id: $ruleId)."
 
                 [PSCustomObject]@{

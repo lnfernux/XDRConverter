@@ -28,6 +28,8 @@ Describe 'Deploy-CustomDetection' {
         Mock Invoke-MgGraphRequest {} -ModuleName XDRConverter
         Mock Get-CustomDetectionIdByDetectorId { return $null } -ModuleName XDRConverter
         Mock Get-CustomDetection { return @() } -ModuleName XDRConverter
+        # The module keeps the id cache between calls, so every test starts from an empty one
+        InModuleScope XDRConverter { $script:DetectionIdsCache = @{ Data = $null; ExpiresAt = [datetime]::MinValue; FailedAt = $null } }
     }
 
     Context 'Parameter Validation' {
@@ -521,7 +523,14 @@ queryText: DeviceEvents
             $wrapped | Should -BeNullOrEmpty
         }
 
-        It 'Should clear the id cache after a create' {
+        It 'Should append the created rule to the id cache' {
+            Mock Invoke-MgGraphRequest { return @{ id = 'new-id'; detectorId = 'assigned-1' } } -ModuleName XDRConverter
+            InModuleScope XDRConverter {
+                $script:DetectionIdsCache = @{
+                    Data      = @([PSCustomObject]@{ Id = '77'; DetectorId = 'assigned-0'; DisplayName = 'Other'; DescriptionTag = $null; TagPrefix = $null })
+                    ExpiresAt = [datetime]::UtcNow.AddHours(1)
+                }
+            }
             $testYaml = @"
 guid: 81fb771a-c57e-41b8-9905-63dbf267c13f
 ruleName: BODY-Cache
@@ -535,10 +544,41 @@ queryText: DeviceEvents
             $tempFile = Join-Path TestDrive: 'body-cache.yaml'
             $testYaml | Out-File -FilePath $tempFile -Encoding UTF8
 
+            Deploy-CustomDetection -InputFile $tempFile -DescriptionTagPrefix 'PREFIX' -Confirm:$false | Out-Null
+            InModuleScope XDRConverter {
+                @($script:DetectionIdsCache.Data).Count | Should -Be 2
+                $entry = $script:DetectionIdsCache.Data | Where-Object Id -eq 'new-id'
+                $entry.DetectorId | Should -Be 'assigned-1'
+                $entry.DisplayName | Should -Be 'BODY-Cache'
+                $entry.DescriptionTag | Should -Be '81fb771a-c57e-41b8-9905-63dbf267c13f'
+                $entry.TagPrefix | Should -Be 'PREFIX'
+            }
+            InModuleScope XDRConverter { $script:DetectionIdsCache = @{ Data = $null; ExpiresAt = [datetime]::MinValue } }
+        }
+
+        It 'Should append the created rule to a cache that holds an empty list' {
+            Mock Invoke-MgGraphRequest { return @{ id = 'new-id' } } -ModuleName XDRConverter
+            InModuleScope XDRConverter {
+                $script:DetectionIdsCache = @{ Data = @(); ExpiresAt = [datetime]::UtcNow.AddHours(1) }
+            }
+            $testYaml = @"
+guid: 81fb771a-c57e-41b8-9905-63dbf267c13f
+ruleName: BODY-Cache-Empty
+alertTitle: Test
+frequency: 1H
+alertSeverity: Medium
+alertDescription: Test
+alertCategory: DefenseEvasion
+queryText: DeviceEvents
+"@
+            $tempFile = Join-Path TestDrive: 'body-cache-empty.yaml'
+            $testYaml | Out-File -FilePath $tempFile -Encoding UTF8
+
             Deploy-CustomDetection -InputFile $tempFile -Confirm:$false | Out-Null
             InModuleScope XDRConverter {
-                $script:DetectionIdsCache.Data | Should -BeNullOrEmpty
+                @($script:DetectionIdsCache.Data).Id | Should -Be @('new-id')
             }
+            InModuleScope XDRConverter { $script:DetectionIdsCache = @{ Data = $null; ExpiresAt = [datetime]::MinValue } }
         }
 
         It 'Should find an untagged rule by display name when -NoDescriptionTag is set' {

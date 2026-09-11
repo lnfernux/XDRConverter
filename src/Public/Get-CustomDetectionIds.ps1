@@ -96,30 +96,7 @@ function Get-CustomDetectionIds {
                 }
             }
 
-            if ($allValues.Count -eq 0) {
-                $result = @()
-            } else {
-                $uuidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
-                $tagPattern = "\[(?:([^:\]]+):)?($uuidPattern)\]"
-
-                $result = $allValues | ForEach-Object {
-                    $descriptionTag = $null
-                    $tagPrefix = $null
-                    $desc = $_.detectionAction.alertTemplate.description
-                    if ($desc -and $desc -match $tagPattern) {
-                        $tagPrefix = $Matches[1]
-                        $descriptionTag = $Matches[2]
-                    }
-
-                    [PSCustomObject]@{
-                        Id             = $_.id
-                        DetectorId     = $_.detectorId
-                        DisplayName    = $_.displayName
-                        DescriptionTag = $descriptionTag
-                        TagPrefix      = $tagPrefix
-                    }
-                }
-            }
+            $result = @($allValues | ForEach-Object { ConvertTo-CustomDetectionIdEntry -Rule $_ })
 
             # Update the cache
             $script:DetectionIdsCache.Data = $result

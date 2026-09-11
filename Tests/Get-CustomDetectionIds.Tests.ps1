@@ -234,6 +234,48 @@ Describe 'Get-CustomDetectionIds' {
         }
     }
 
+    Context 'Cache entries' {
+        BeforeEach {
+            Mock Assert-MgGraphConnection {} -ModuleName XDRConverter
+            Mock Invoke-MgGraphRequestWithRetry { return @{ value = @() } } -ModuleName XDRConverter
+            InModuleScope XDRConverter {
+                $script:DetectionIdsCache = @{
+                    Data      = @([PSCustomObject]@{ Id = 'rule-a'; DetectorId = $null; DisplayName = 'A'; DescriptionTag = $null; TagPrefix = $null })
+                    ExpiresAt = [datetime]::UtcNow.AddHours(1)
+                }
+            }
+        }
+
+        It 'Serves an appended entry without calling the API' {
+            InModuleScope XDRConverter {
+                Add-CustomDetectionIdsCacheEntry -Entry ([PSCustomObject]@{ Id = 'rule-b'; DetectorId = 'd-b'; DisplayName = 'B'; DescriptionTag = 'c0ffee00-1111-4222-8333-444455556666'; TagPrefix = $null })
+            }
+            $result = Get-CustomDetectionIds
+            @($result).Id | Should -Be @('rule-a', 'rule-b')
+            Should -Invoke Invoke-MgGraphRequestWithRetry -ModuleName XDRConverter -Times 0 -Exactly
+        }
+
+        It 'Replaces an entry that carries the same id' {
+            InModuleScope XDRConverter {
+                Add-CustomDetectionIdsCacheEntry -Entry ([PSCustomObject]@{ Id = 'rule-a'; DetectorId = 'd-a'; DisplayName = 'A2'; DescriptionTag = $null; TagPrefix = $null })
+            }
+            $result = Get-CustomDetectionIds
+            @($result).Count | Should -Be 1
+            $result[0].DisplayName | Should -Be 'A2'
+        }
+
+        It 'Builds an entry with the tag and its prefix from a rule' {
+            InModuleScope XDRConverter {
+                $entry = ConvertTo-CustomDetectionIdEntry -Rule @{ id = '9'; detectorId = 'd-9'; displayName = 'Nine'; detectionAction = @{ alertTemplate = @{ description = 'x [PREFIX:c0ffee00-1111-4222-8333-444455556666]' } } }
+                $entry.Id | Should -Be '9'
+                $entry.DetectorId | Should -Be 'd-9'
+                $entry.DisplayName | Should -Be 'Nine'
+                $entry.DescriptionTag | Should -Be 'c0ffee00-1111-4222-8333-444455556666'
+                $entry.TagPrefix | Should -Be 'PREFIX'
+            }
+        }
+    }
+
     Context 'List timeouts' {
         BeforeEach {
             Mock Assert-MgGraphConnection {} -ModuleName XDRConverter

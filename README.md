@@ -267,7 +267,7 @@ Get-CustomDetection -DetectionId '81fb771a-c57e-41b8-9905-63dbf267c13f' |
 
 ### Get-CustomDetectionIds
 
-Lists detection rule IDs with their description tags and tag prefixes. Results are cached for the specified duration (default: 60 minutes) to reduce API calls. The cache is cleared automatically after a rule is created or deleted. A list request that times out is asked once more. After a failed retry the cmdlet throws at once for five minutes, unless `-Force` is set.
+Lists detection rule IDs with their description tags and tag prefixes. Results are cached for the specified duration (default: 60 minutes) to reduce API calls. A created rule is added to the cache and a deleted rule is removed from it, so a run that creates many rules asks the list once. A list request that times out is asked once more. After a failed retry the cmdlet throws at once for five minutes, unless `-Force` is set.
 
 The output includes:
 - **Id**: The detection rule ID
@@ -548,7 +548,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - New rules get the rule id `rule-<guid>`. Rules are found through that id, through the description tag, or through the display name with `-NoDescriptionTag`. When the rule list carries none of them, `rule-<guid>` is requested directly before a create, since the list can lag behind a create or a delete
 - `ConvertTo-CustomDetectionYaml` emits the current keys and upgrades rules that still carry the legacy properties
 - Change detection compares every managed property, so changes to actions, entity mappings, techniques or device groups trigger an update
-- The detection id cache is cleared after a create or delete
+- The detection id cache gains a created rule and loses a deleted one instead of being cleared, so a run that creates many rules asks the list once
 - JSON input files are normalised before deployment, so legacy JSON exports deploy with the current body
 - `Test-CustomDetectionMitreTechnique` accepts a `tactics` list and validates each tactic. The parent technique of a grouped entry is validated together with its sub-techniques
 - `ConvertTo-CustomDetectionYaml -LegacyKeys` emits the legacy YAML keys for files that must stay in the old form. Column mappings the legacy identifiers cannot express are dropped with a warning

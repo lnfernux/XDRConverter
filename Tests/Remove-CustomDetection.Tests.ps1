@@ -129,19 +129,19 @@ Describe 'Remove-CustomDetection' {
             $result.RuleId | Should -Be 'rule-123'
         }
 
-        It 'Should clear the id cache after a delete' {
+        It 'Should drop the deleted rule from the id cache and keep the rest' {
             Mock Get-CustomDetection {
                 return @{ id = 'rule-789'; displayName = 'Cached Rule' }
             } -ModuleName XDRConverter
             Mock Invoke-MgGraphRequest {} -ModuleName XDRConverter
             InModuleScope XDRConverter {
-                $script:DetectionIdsCache = @{ Data = @(@{ Id = 'rule-789' }); ExpiresAt = [datetime]::UtcNow.AddHours(1) }
+                $script:DetectionIdsCache = @{ Data = @([PSCustomObject]@{ Id = 'rule-789' }, [PSCustomObject]@{ Id = 'rule-790' }); ExpiresAt = [datetime]::UtcNow.AddHours(1) }
             }
 
             Remove-CustomDetection -Id 'rule-789' -Confirm:$false | Out-Null
 
             InModuleScope XDRConverter {
-                $script:DetectionIdsCache.Data | Should -BeNullOrEmpty
+                @($script:DetectionIdsCache.Data).Id | Should -Be @('rule-790')
             }
         }
 
