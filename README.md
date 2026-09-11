@@ -47,14 +47,14 @@ Copy-Item -Path .\src -Destination "$PROFILE\..\Modules\XDRConverter" -Recurse
 
 ### ConvertTo-CustomDetectionJson
 
-Converts a YAML Defender XDR detection file to JSON format. Supports file input, pipeline input from `Get-CustomDetection`, and multiple output naming strategies.
+Converts a YAML Defender XDR detection file to the JSON request body. Pipeline input from `Get-CustomDetection` is written as the API returned it, which is what an export of the tenant needs.
 
 #### Parameters
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | InputFile | String | Yes* | Path to the input YAML file (*File parameter set) |
-| InputObject | PSObject | Yes* | JSON detection rule object; accepts pipeline input (*Object parameter sets) |
+| InputObject | PSObject | Yes* | A rule object from `Get-CustomDetection`, written as the API returned it; accepts pipeline input (*Object parameter sets) |
 | OutputFile | String | No | Path to the output JSON file. If not specified, outputs to stdout |
 | UseDisplayNameAsFilename | Switch | No | Use the rule's display name as the output filename (.json) |
 | UseIdAsFilename | Switch | No | Use the rule's guid as the output filename (.json). Taken from the description tag, then a UUID rule id, then the guid after the `rule-` prefix, then the detector ID the API assigned |
@@ -557,7 +557,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - With `-NoDescriptionTag`, an existing rule is found through its display name, which the API keeps unique
 - `Get-CustomDetectionIds` carries the display name and the detector ID the API assigned. The list is projected to the id, the detector ID, the display name and the detection action
 - With `-NoDescriptionTag`, a rule matched by its display name produces a warning, since a renamed file would create a new rule
-- A rule the platform set to `autoDisabled` is left alone with a warning until the file changes or `-Force` is used
+- A rule the platform set to `autoDisabled` is not enabled again until the file changes or `-Force` is used, and a warning names it. A file that disables the rule sends `disabled` once, since the API rejects `autoDisabled` on write
 - A file action that names both hash columns is rejected before the request
 - An action field the Graph action type does not document is rejected before the request
 - OData annotations on entity mappings and automated actions are ignored
@@ -590,6 +590,10 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - `Remove-CustomDetection` asks for the client id when the rule list does not answer, which is when a rule most needs removing
 - The editor schema rejects an empty device group name, an account mapping without a key column or a name and domain pair, a field the action type does not document, and a file action that names both hash columns
 - The legacy export warns that the detector id is dropped, as it does for the values the other current keys carry
+- An action field value that is not a single column name is rejected, and so is a device group name that is not a single name. Both used to reach the API unchanged
+- Action fields follow their documented order, so the same fields give the same item whatever their order in the file, and an action listed twice is caught whichever order its fields are in
+- The editor schema accepts an `additionalFields` key that carries no value, which the converter reads as absent
+- Action types and field names are matched without case, which the editor schema cannot express. The schema lists the documented casing and names the leniency in its description
 - Bugs/issues or undocumented behavior identified while testing: 
    - `PT0S` and non-MITRE tactic names such as `SuspiciousActivity` are accepted on create
    - `autoDisabled` is rejected on write and is sent as `disabled`

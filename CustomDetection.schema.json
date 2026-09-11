@@ -503,7 +503,7 @@
                 "properties": {
                     "actionType": {
                         "type": "string",
-                        "description": "Type of action to perform",
+                        "description": "Type of action to perform. Listed in the casing the documentation uses, and the converter also accepts other casings",
                         "enum": [
                             "IsolateMachine",
                             "CollectInvestigationPackage",
@@ -524,8 +524,8 @@
                         ]
                     },
                     "additionalFields": {
-                        "type": "object",
-                        "description": "Column mapping and options for the action. Defaults apply when omitted",
+                        "type": [ "object", "null" ],
+                        "description": "Column mapping and options for the action. Defaults apply when the key is omitted or carries no value. Field names are listed in the casing the request carries, and the converter also accepts other casings",
                         "properties": {
                             "isolationType": {
                                 "type": "string",

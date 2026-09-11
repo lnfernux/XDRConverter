@@ -142,6 +142,15 @@ Describe 'CustomDetection schema' {
         }
     }
 
+    It 'Accepts an additionalFields key that carries no value, as the converter does' {
+        $json = '{"guid":"81fb771a-c57e-41b8-9905-63dbf267c13f","ruleName":"r","alertTitle":"t","frequency":"PT1H","alertSeverity":"Low","alertDescription":"d","alertCategory":"Execution","queryText":"q","actions":[{"actionType":"IsolateMachine","additionalFields":null}]}'
+        (Test-Json -Json $json -SchemaFile $script:SchemaFile -ErrorAction SilentlyContinue) | Should -BeTrue
+        InModuleScope XDRConverter {
+            $result = ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = 'IsolateMachine'; additionalFields = $null })
+            $result.isolateDevices[0].deviceIdColumn | Should -BeExactly 'DeviceId'
+        }
+    }
+
     It 'Accepts every documented column of every collection' {
         $expected = InModuleScope XDRConverter { Get-CustomDetectionEntityMappingColumns }
         foreach ($name in $expected.Keys) {

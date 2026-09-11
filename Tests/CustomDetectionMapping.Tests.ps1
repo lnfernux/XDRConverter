@@ -1179,6 +1179,40 @@ Describe 'CustomDetection mapping helpers' {
             }
         }
 
+        It 'Rejects an action field value that is not a single column name' -ForEach @(
+            @{ Value = @('DeviceId', 'DeviceName') }
+            @{ Value = 42 }
+            @{ Value = $true }
+        ) {
+            InModuleScope XDRConverter -Parameters @{ Value = $Value } {
+                { ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = 'IsolateMachine'; additionalFields = @{ deviceIdColumn = $Value } }) } | Should -Throw '*deviceIdColumn*single column name*'
+            }
+        }
+
+        It 'Rejects a device group that is not a single name' {
+            InModuleScope XDRConverter {
+                { ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = 'AllowFile'; additionalFields = @{ sha1Column = 'SHA1'; deviceGroupNames = @('Servers', '') } }) } | Should -Throw '*device group*'
+                $result = ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = 'AllowFile'; additionalFields = @{ sha1Column = 'SHA1'; deviceGroupNames = @('Servers', 'Workstations') } })
+                @($result.allowFiles[0].deviceGroupNames) | Should -Be @('Servers', 'Workstations')
+            }
+        }
+
+        It 'Rejects the same action listed twice whatever the field order' {
+            InModuleScope XDRConverter {
+                { ConvertTo-CustomDetectionAutomatedActions -Actions @(
+                        @{ actionType = 'AllowFile'; additionalFields = [ordered]@{ sha256Column = 'SHA256'; deviceGroupNames = @('A') } },
+                        @{ actionType = 'AllowFile'; additionalFields = [ordered]@{ deviceGroupNames = @('A'); sha256Column = 'SHA256' } }
+                    ) } | Should -Throw '*listed twice*'
+            }
+        }
+
+        It 'Writes the action fields in their documented order' {
+            InModuleScope XDRConverter {
+                $result = ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = 'AllowFile'; additionalFields = [ordered]@{ deviceGroupNames = @('A'); sha256Column = 'SHA256' } })
+                @($result.allowFiles[0].Keys) | Should -Be @('sha256Column', 'deviceGroupNames')
+            }
+        }
+
         It 'Treats an empty additionalFields as absent and keeps the defaults' {
             InModuleScope XDRConverter {
                 $result = ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = 'IsolateMachine'; additionalFields = $null })
