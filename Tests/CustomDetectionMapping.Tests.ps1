@@ -638,6 +638,24 @@ Describe 'CustomDetection mapping helpers' {
             }
         }
 
+        It 'Rejects a scope whose only entry is empty or null' {
+            InModuleScope XDRConverter {
+                $base = @{ guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'; ruleName = 'r'; alertTitle = 't'; frequency = 'PT1H'; alertSeverity = 'Low'; alertDescription = 'd'; alertCategory = 'Execution'; queryText = 'q' }
+                $blank = $base.Clone()
+                $blank.organizationalScope = @('')
+                { ConvertFrom-CustomDetectionYamlToJson -YamlObject $blank } | Should -Throw '*empty device group*'
+                $nul = $base.Clone()
+                $nul.organizationalScope = @($null)
+                { ConvertFrom-CustomDetectionYamlToJson -YamlObject $nul } | Should -Throw '*empty device group*'
+                $one = $base.Clone()
+                $one.organizationalScope = @('Servers')
+                @((ConvertFrom-CustomDetectionYamlToJson -YamlObject $one).detectionAction.organizationalScope.deviceGroups) | Should -Be @('Servers')
+                $none = $base.Clone()
+                $none.organizationalScope = @()
+                (ConvertFrom-CustomDetectionYamlToJson -YamlObject $none).detectionAction.Keys | Should -Not -Contain 'organizationalScope'
+            }
+        }
+
         It 'Rejects non-string scope and custom detail values' {
             InModuleScope XDRConverter {
                 $base = @{ guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'; ruleName = 'r'; alertTitle = 't'; frequency = 'PT1H'; alertSeverity = 'Low'; alertDescription = 'd'; alertCategory = 'Execution'; queryText = 'q' }

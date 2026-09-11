@@ -134,19 +134,21 @@ function ConvertFrom-CustomDetectionYamlToJson {
         alertTemplate = $alertTemplate
     }
 
-    $scope = Get-CustomDetectionValue -Object $yaml -Path 'organizationalScope'
-    if (Test-CustomDetectionValue $scope) {
-        foreach ($entry in @($scope)) {
+    # The key is read in place. A one-item list unrolls on its way back from a helper, and an empty name would vanish with it
+    if ($yaml.Contains('organizationalScope') -and $null -ne $yaml['organizationalScope']) {
+        $entries = @($yaml['organizationalScope'])
+        foreach ($entry in $entries) {
+            if ($null -eq $entry -or [string]::IsNullOrWhiteSpace("$entry")) {
+                throw 'organizationalScope contains an empty device group name.'
+            }
             if ($entry -isnot [string]) {
                 throw "organizationalScope entry '$entry' must be a single device group name."
             }
         }
-        $deviceGroups = @($scope | ForEach-Object { "$_" })
-        if (@($deviceGroups | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
-            throw 'organizationalScope contains an empty device group name.'
-        }
-        $detectionAction['organizationalScope'] = [ordered]@{
-            deviceGroups = [object[]]$deviceGroups
+        if ($entries.Count -gt 0) {
+            $detectionAction['organizationalScope'] = [ordered]@{
+                deviceGroups = [object[]]@($entries | ForEach-Object { "$_" })
+            }
         }
     }
 
