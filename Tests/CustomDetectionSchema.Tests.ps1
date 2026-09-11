@@ -20,6 +20,14 @@ Describe 'CustomDetection schema' {
         }
     }
 
+    It 'Accepts a detectorId and rejects one that is not a uuid' {
+        $rule = $script:BaseRule.Clone()
+        $rule.detectorId = '7cb0d5af-690e-4f63-b4b9-6b40728cac5f'
+        (Test-Json -Json ($rule | ConvertTo-Json) -SchemaFile $script:SchemaFile -ErrorAction SilentlyContinue) | Should -BeTrue
+        $rule.detectorId = 'assigned-by-api'
+        (Test-Json -Json ($rule | ConvertTo-Json) -SchemaFile $script:SchemaFile -ErrorAction SilentlyContinue) | Should -BeFalse
+    }
+
     It 'Rejects an id that is not a uuid behind the prefix' {
         $rule = $script:BaseRule.Clone()
         $rule.Remove('guid')

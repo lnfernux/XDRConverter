@@ -27,6 +27,13 @@ Describe 'Get-CustomDetectionIdByDetectorId' {
         Get-CustomDetectionIdByDetectorId -DetectorId 'a1b2c3d4-0000-4000-8000-000000000000' | Should -Be 'a1b2c3d4-0000-4000-8000-000000000000'
     }
 
+    It 'Returns the rule id of a rule whose detectorId the API assigned equals the value' {
+        Mock Get-CustomDetectionIds {
+            return @([PSCustomObject]@{ Id = '61'; DetectorId = '7cb0d5af-690e-4f63-b4b9-6b40728cac5f'; DisplayName = 'Assigned'; DescriptionTag = $null; TagPrefix = $null })
+        } -ModuleName XDRConverter
+        Get-CustomDetectionIdByDetectorId -DetectorId '7cb0d5af-690e-4f63-b4b9-6b40728cac5f' | Should -Be '61'
+    }
+
     It 'Returns the rule id of a rule that carries the guid only in its description tag' {
         Get-CustomDetectionIdByDetectorId -DetectorId 'c0ffee00-1111-4222-8333-444455556666' | Should -Be '48'
     }

@@ -27,7 +27,7 @@ function ConvertFrom-CustomDetectionYamlToJson {
     )
 
     $knownKeys = @(
-        'guid', 'id', 'ruleName', 'description', 'isEnabled', 'status', 'frequency', 'alertTitle',
+        'guid', 'id', 'detectorId', 'ruleName', 'description', 'isEnabled', 'status', 'frequency', 'alertTitle',
         'alertSeverity', 'alertDescription', 'alertRecommendedAction', 'alertCategory', 'mitreTechniques',
         'tactics', 'impactedEntities', 'entityMappings', 'customDetails', 'organizationalScope', 'actions', 'queryText'
     )
@@ -161,6 +161,10 @@ function ConvertFrom-CustomDetectionYamlToJson {
     $jsonObj = [ordered]@{}
     if ($ruleGuid) {
         $jsonObj.id = "rule-$ruleGuid"
+    }
+    $detectorId = Get-CustomDetectionValue -Object $yaml -Path 'detectorId'
+    if (Test-CustomDetectionValue $detectorId) {
+        $jsonObj.detectorId = "$detectorId".Trim()
     }
     $jsonObj.displayName = Get-CustomDetectionValue -Object $yaml -Path 'ruleName'
     $jsonObj.status = $status

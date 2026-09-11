@@ -26,6 +26,10 @@
             "pattern": "^(rule-)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
             "description": "Alias of guid, with or without the rule- prefix. When both are present they must be equal"
         },
+        "detectorId": {
+            "$ref": "#/definitions/uuid",
+            "description": "Assigned by the API and written by the YAML export for reference. A value in the file is sent back unchanged"
+        },
         "ruleName": {
             "type": "string",
             "description": "Name of the custom detection rule"

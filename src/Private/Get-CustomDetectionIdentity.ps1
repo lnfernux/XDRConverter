@@ -5,7 +5,7 @@ function Get-CustomDetectionIdentity {
 
     .DESCRIPTION
         Prefers the UUID from the description tag, then a UUID-shaped id, then
-        whatever follows the rule prefix of the id, then the legacy detectorId.
+        whatever follows the rule prefix of the id, then the detector ID the API assigned.
         Returns $null when none is present.
     #>
     [CmdletBinding()]

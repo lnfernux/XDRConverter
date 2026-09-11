@@ -39,6 +39,36 @@ Describe 'ConvertTo-CustomDetectionYaml' {
     }
   }
 
+  Context 'detectorId' {
+
+    It 'Emits the detectorId the API assigned right after the guid' {
+      $rule = [PSCustomObject]@{
+        id              = 'rule-81fb771a-c57e-41b8-9905-63dbf267c13f'
+        detectorId      = '7cb0d5af-690e-4f63-b4b9-6b40728cac5f'
+        displayName     = 'WithDetector'
+        status          = 'enabled'
+        detectionAction = @{ alertTemplate = @{ title = 't'; description = 'd'; severity = 'low'; tactics = @(@{ tactic = 'Execution' }) } }
+        queryCondition  = @{ queryText = 'DeviceEvents' }
+        schedule        = @{ frequency = 'PT1H' }
+      }
+      $yaml = $rule | ConvertTo-CustomDetectionYaml
+      $yaml | Should -Match '(?m)^guid: 81fb771a-c57e-41b8-9905-63dbf267c13f?
+detectorId: 7cb0d5af-690e-4f63-b4b9-6b40728cac5f'
+    }
+
+    It 'Leaves detectorId out when the rule has none' {
+      $rule = [PSCustomObject]@{
+        id              = 'rule-81fb771a-c57e-41b8-9905-63dbf267c13f'
+        displayName     = 'NoDetector'
+        status          = 'enabled'
+        detectionAction = @{ alertTemplate = @{ title = 't'; description = 'd'; severity = 'low'; tactics = @(@{ tactic = 'Execution' }) } }
+        queryCondition  = @{ queryText = 'DeviceEvents' }
+        schedule        = @{ frequency = 'PT1H' }
+      }
+      ($rule | ConvertTo-CustomDetectionYaml) | Should -Not -Match 'detectorId'
+    }
+  }
+
   Context 'Functionality' {
 
     It 'Should convert JSON to YAML string when no OutputFile specified' {
@@ -232,13 +262,13 @@ Describe 'ConvertTo-CustomDetectionYaml' {
       $result | Should -Match 'alertSeverity:'
       $result | Should -Match 'alertDescription:'
       $result | Should -Match 'tactics:'
+      $result | Should -Match 'detectorId: 81fb771a-c57e-41b8-9905-63dbf267c13f'
 
       # Should NOT include JSON-specific or legacy properties
       $result | Should -Not -Match 'createdBy:'
       $result | Should -Not -Match 'createdDateTime:'
       $result | Should -Not -Match 'lastModifiedBy:'
       $result | Should -Not -Match 'alertCategory:'
-      $result | Should -Not -Match 'detectorId:'
     }
 
     It 'Should map JSON properties to correct YAML fields' {

@@ -420,6 +420,25 @@ tactics:
                         "$warning" | Should -Match 'Both tactics and alertCategory/mitreTechniques'
         }
 
+        It 'Carries a detectorId from the file into the body without a warning' {
+            $yaml = @"
+guid: 81fb771a-c57e-41b8-9905-63dbf267c13f
+detectorId: 7cb0d5af-690e-4f63-b4b9-6b40728cac5f
+ruleName: WithDetector
+alertTitle: t
+frequency: PT1H
+alertSeverity: Low
+alertDescription: d
+alertCategory: Execution
+queryText: DeviceEvents
+"@
+            $file = New-YamlFile -Name 'detector.yaml' -Content $yaml
+            $result = ConvertTo-CustomDetectionJson -InputFile $file -WarningVariable warning -WarningAction SilentlyContinue | ConvertFrom-Json
+            $result.detectorId | Should -Be '7cb0d5af-690e-4f63-b4b9-6b40728cac5f'
+            $result.id | Should -Be 'rule-81fb771a-c57e-41b8-9905-63dbf267c13f'
+            "$warning" | Should -Not -Match 'detectorId'
+        }
+
         It 'Throws when more than one tactic is listed because the API accepts a single tactic' {
             $yaml = $baseYaml + @"
 

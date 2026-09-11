@@ -5,11 +5,10 @@ function Get-CustomDetectionIds {
 
     .DESCRIPTION
         Queries Microsoft Graph API to retrieve all detection rules and returns
-        their detection rule ID, the display name, the UUID from the description
-        tag (if present), and the tag prefix (if present). The DetectorId property
-        is kept for compatibility and is empty, since the list no longer requests
-        the deprecated detector id. Results are cached for the duration specified
-        by CacheTtlMinutes (default: 60 minutes).
+        their detection rule ID, the detector ID the API assigned, the display
+        name, the UUID from the description tag (if present), and the tag prefix
+        (if present). Results are cached for the duration specified by
+        CacheTtlMinutes (default: 60 minutes).
 
     .PARAMETER CacheTtlMinutes
         How long (in minutes) to keep the cached result before re-querying the API.
@@ -70,8 +69,8 @@ function Get-CustomDetectionIds {
         }
 
         try {
-            # Query the Microsoft Graph API with pagination support. The projection names only properties that outlive the 2026-10-01 removals
-            $listUri = 'https://graph.microsoft.com/beta/security/rules/detectionRules?$select=id,displayName,detectionAction'
+            # Query the Microsoft Graph API with pagination support. The projection names the properties the lookups read
+            $listUri = 'https://graph.microsoft.com/beta/security/rules/detectionRules?$select=id,detectorId,displayName,detectionAction'
             $retried = $false
 
             while ($true) {

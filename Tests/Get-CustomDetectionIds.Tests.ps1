@@ -196,7 +196,7 @@ Describe 'Get-CustomDetectionIds' {
         }
     }
 
-    Context 'Without detectorId' {
+    Context 'Projection' {
         BeforeEach {
             Mock Assert-MgGraphConnection {} -ModuleName XDRConverter
             Mock Invoke-MgGraphRequestWithRetry {
@@ -205,6 +205,7 @@ Describe 'Get-CustomDetectionIds' {
                     value = @(
                         @{
                             id              = 'rule-new'
+                            detectorId      = '7cb0d5af-690e-4f63-b4b9-6b40728cac5f'
                             displayName     = 'Rule New'
                             detectionAction = @{ alertTemplate = @{ description = 'Alert [12345678-1234-1234-1234-123456789abc]' } }
                         }
@@ -217,19 +218,18 @@ Describe 'Get-CustomDetectionIds' {
             }
         }
 
-        It 'Should project the id, the display name and the detection action only' {
+        It 'Should project the id, the detector id, the display name and the detection action' {
             Get-CustomDetectionIds | Out-Null
-            $script:CapturedUri | Should -Match '\$select=id,displayName,detectionAction'
-            $script:CapturedUri | Should -Not -Match 'detectorId'
+            $script:CapturedUri | Should -Match '\$select=id,detectorId,displayName,detectionAction'
         }
 
         It 'Should carry the display name' {
             (Get-CustomDetectionIds)[0].DisplayName | Should -Be 'Rule New'
         }
 
-        It 'Should leave DetectorId empty when the API does not return it' {
+        It 'Should carry the detector id the API assigned' {
             $result = Get-CustomDetectionIds
-            $result[0].DetectorId | Should -BeNullOrEmpty
+            $result[0].DetectorId | Should -Be '7cb0d5af-690e-4f63-b4b9-6b40728cac5f'
             $result[0].DescriptionTag | Should -Be '12345678-1234-1234-1234-123456789abc'
         }
     }

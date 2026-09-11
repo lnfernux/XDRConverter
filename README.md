@@ -15,7 +15,7 @@ The XDRConverter module provides cmdlets to work with Microsoft Defender XDR cus
 | `Deploy-CustomDetection` | Deploys detection rules to Defender XDR via Microsoft Graph API |
 | `Get-CustomDetection` | Retrieves detection rules from Defender XDR |
 | `Get-CustomDetectionIds` | Lists detection rule IDs with their description tags (cached) |
-| `Get-CustomDetectionIdByDetectorId` | Looks up a detection rule ID by its guid, with or without the `rule-` prefix |
+| `Get-CustomDetectionIdByDetectorId` | Looks up a detection rule ID by its guid, by the detector ID the API assigned, or by its description tag |
 | `Get-CustomDetectionIdByDescriptionTag` | Looks up a detection rule ID by its description tag UUID |
 | `Remove-CustomDetection` | Removes a detection rule from Defender XDR |
 | `Test-CustomDetectionMitreTechnique` | Validates MITRE ATT&CK techniques against XDR-supported categories |
@@ -57,7 +57,7 @@ Converts a YAML Defender XDR detection file to JSON format. Supports file input,
 | InputObject | PSObject | Yes* | JSON detection rule object; accepts pipeline input (*Object parameter sets) |
 | OutputFile | String | No | Path to the output JSON file. If not specified, outputs to stdout |
 | UseDisplayNameAsFilename | Switch | No | Use the rule's display name as the output filename (.json) |
-| UseIdAsFilename | Switch | No | Use the rule's guid as the output filename (.json). Taken from the description tag, then a UUID rule id, then the guid after the `rule-` prefix, then the legacy detectorId |
+| UseIdAsFilename | Switch | No | Use the rule's guid as the output filename (.json). Taken from the description tag, then a UUID rule id, then the guid after the `rule-` prefix, then the detector ID the API assigned |
 | OutputFolder | String | No | Folder for output when using `-UseDisplayNameAsFilename` or `-UseIdAsFilename` (defaults to temp directory) |
 | Enabled | Boolean | No | Set the rule status to enabled (`$true`) or disabled (`$false`) |
 | Severity | String | No | Override the alert severity (`Informational`, `Low`, `Medium`, `High`) |
@@ -99,7 +99,7 @@ Converts a JSON Defender XDR detection file to YAML format. Properties not defin
 | InputObject | PSObject | Yes* | JSON detection rule object; accepts pipeline input (*Object parameter sets) |
 | OutputFile | String | No | Path to the output YAML file. If not specified, outputs to stdout |
 | UseDisplayNameAsFilename | Switch | No | Use the rule's display name as the output filename (.yaml) |
-| UseIdAsFilename | Switch | No | Use the rule's guid as the output filename (.yaml). Taken from the description tag, then a UUID rule id, then the guid after the `rule-` prefix, then the legacy detectorId |
+| UseIdAsFilename | Switch | No | Use the rule's guid as the output filename (.yaml). Taken from the description tag, then a UUID rule id, then the guid after the `rule-` prefix, then the detector ID the API assigned |
 | OutputFolder | String | No | Folder for output when using `-UseDisplayNameAsFilename` or `-UseIdAsFilename` (defaults to temp directory) |
 | Enabled | Boolean | No | Set the rule status to enabled (`$true`) or disabled (`$false`) |
 | Severity | String | No | Override the alert severity (`Informational`, `Low`, `Medium`, `High`) |
@@ -271,7 +271,7 @@ Lists detection rule IDs with their description tags and tag prefixes. Results a
 
 The output includes:
 - **Id**: The detection rule ID
-- **DetectorId**: Compatibility column. Empty, since the list no longer requests the deprecated detector ID
+- **DetectorId**: The detector ID the API assigned to the rule
 - **DisplayName**: The rule name
 - **DescriptionTag**: The UUID extracted from the description tag (e.g., from `[PREFIX:uuid]` or `[uuid]`)
 - **TagPrefix**: The prefix text from the description tag (e.g., `PREFIX` from `[PREFIX:uuid]`, or `$null` if no prefix)
@@ -300,7 +300,7 @@ Get-CustomDetectionIds -CacheTtlMinutes 10
 
 ### Get-CustomDetectionIdByDetectorId
 
-Returns the detection rule ID for a given guid. The guid is matched against the rule ID in its plain and `rule-` prefixed forms. Uses the cached output of `Get-CustomDetectionIds`.
+Returns the detection rule ID for a given guid. The guid is matched against the rule ID in its plain and `rule-` prefixed forms, then against the detector ID the API assigned, then against the description tag. Uses the cached output of `Get-CustomDetectionIds`.
 
 #### Parameters
 
@@ -374,6 +374,7 @@ The Graph API deprecated several `detectionRule` properties and removes them on 
 | YAML key | Required | Graph property | Notes |
 | --- | --- | --- | --- |
 | guid | Yes | `id` | Becomes `id: rule-<guid>` in the converted JSON, which is the value the create request carries, and the bare guid is the description tag. Not required by the API in live testing, whatever the reference says. `id` is accepted as an alias, with or without the `rule-` prefix |
+| detectorId | No | `detectorId` | Assigned by the API. The YAML export writes it for reference, and a value in the file is sent back unchanged |
 | ruleName | Yes | `displayName` | |
 | description | No | `description` | Rule description shown in the portal rule list. A value the file does not set is left unchanged on the rule |
 | status | No | `status` | `enabled`, `disabled` or `autoDisabled`. Wins over `isEnabled` |
@@ -553,7 +554,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - `ConvertTo-CustomDetectionYaml -LegacyKeys` emits the legacy YAML keys for files that must stay in the old form. Column mappings the legacy identifiers cannot express are dropped with a warning
 - The legacy entity types IP, URL, FileHash, Process, RegistryKey and RegistryValue now deploy. Version 1.4.1 turned them into impactedAsset types the API does not have
 - With `-NoDescriptionTag`, an existing rule is found through its display name, which the API keeps unique
-- `Get-CustomDetectionIds` carries the display name. The list is projected to the id, the display name and the detection action, so `DetectorId` is empty and the request keeps working after the deprecated properties are removed
+- `Get-CustomDetectionIds` carries the display name and the detector ID the API assigned. The list is projected to the id, the detector ID, the display name and the detection action
 - With `-NoDescriptionTag`, a rule matched by its display name produces a warning, since a renamed file would create a new rule
 - A rule the platform set to `autoDisabled` is left alone with a warning until the file changes or `-Force` is used
 - A file action that names both hash columns is rejected before the request
@@ -575,6 +576,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - Action fields in `additionalFields` are written under their documented name whatever the casing in the file, so `Sha256Column` no longer reports an update on every run
 - The editor schema accepts the `rule-` prefix on `id` and lists the documented columns of every entity mapping collection, so it rejects the column names the converter rejects
 - A rule list request that times out is asked once more and then left alone for five minutes. In that window `Deploy-CustomDetection` looks a rule up by its client id only and reports a rule it cannot find instead of creating it, so a slow list costs one timeout per run instead of one per rule
+- `detectorId` is a YAML key. The YAML export writes the value the API assigned, the converter carries a value from the file into the request body, and `Get-CustomDetectionIdByDetectorId` matches it
 - Bugs/issues or undocumented behavior identified while testing: 
    - `PT0S` and non-MITRE tactic names such as `SuspiciousActivity` are accepted on create
    - `autoDisabled` is rejected on write and is sent as `disabled`
@@ -587,6 +589,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
    - Entity mapping columns are matched against the query projection case-sensitively. `deviceid` is rejected when the query projects `DeviceId`
    - The rule list can omit a rule for a long time after its id was deleted and created again, while a create with that id answers Conflict
    - The list request can exceed the Graph client's 300 second timeout several times in a row. Four and five in a row were seen in one morning
+   - `detectorId` is assigned by the API on create. A value sent with the request is not stored, so it never equals the file guid
 
 ### 1.4.1
 - Included Graph API error details in deployment failure messages for easier troubleshooting

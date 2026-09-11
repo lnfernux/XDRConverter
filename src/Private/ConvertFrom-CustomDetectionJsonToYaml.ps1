@@ -29,6 +29,7 @@ function ConvertFrom-CustomDetectionJsonToYaml {
 
     $DefaultSortOrderInYAML = @(
         'guid'
+        'detectorId'
         'ruleName'
         'description'
         'isEnabled'
@@ -175,6 +176,12 @@ function ConvertFrom-CustomDetectionJsonToYaml {
     }
     if ($actions.Count -gt 0) {
         $yamlObj['actions'] = [object[]]$actions
+    }
+
+    # The detector id is assigned by the API and travels with the file for reference
+    $detectorId = Get-CustomDetectionValue -Object $JsonObject -Path 'detectorId'
+    if (Test-CustomDetectionValue $detectorId) {
+        $yamlObj['detectorId'] = "$detectorId"
     }
 
     $orderedYamlObj = ConvertTo-CustomDetectionOrderedMap -Map $yamlObj -Order $DefaultSortOrderInYAML

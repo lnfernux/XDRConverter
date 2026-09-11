@@ -26,7 +26,7 @@ function ConvertTo-CustomDetectionYaml {
     .PARAMETER UseIdAsFilename
         Use the rule's guid as the output filename (with .yaml extension). Taken from the
         description tag, then a UUID rule id, then the guid after the rule- prefix, then
-        the legacy detectorId.
+        the detector ID the API assigned.
         The file is written to -OutputFolder (or the user's temp directory if not specified).
         Cannot be combined with -OutputFile or -UseDisplayNameAsFilename.
 

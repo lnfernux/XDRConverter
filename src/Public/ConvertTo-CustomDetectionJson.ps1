@@ -26,7 +26,7 @@ function ConvertTo-CustomDetectionJson {
     .PARAMETER UseIdAsFilename
         Use the rule's guid as the output filename (with .json extension). The guid is
         taken from the description tag, then from a UUID-shaped rule id, then from the
-        legacy detectorId.
+        detector ID the API assigned.
         The file is written to -OutputFolder (or the user's temp directory if not specified).
         Cannot be combined with -OutputFile or -UseDisplayNameAsFilename.
 
