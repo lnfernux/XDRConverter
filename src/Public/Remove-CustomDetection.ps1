@@ -19,8 +19,8 @@ function Remove-CustomDetection {
         The guid from the source file. Resolved to the rule ID via
         Get-CustomDetectionIdByDetectorId, which matches the rule ID with or
         without the rule prefix, the detector ID the API assigned and then the
-        description tag. When the list does not carry the rule, the client id
-        rule-<guid> is asked for directly.
+        description tag. When the list does not carry the rule or does not
+        answer, the client id rule-<guid> is asked for directly.
 
     .PARAMETER DescriptionTag
         The UUID tag embedded in the alert description. Resolved to the rule ID
@@ -76,8 +76,13 @@ function Remove-CustomDetection {
                     $ruleId = $Id
                 }
                 'ByDetectorId' {
-                    $ruleId = Get-CustomDetectionIdByDetectorId -DetectorId $DetectorId
-                    # The list can omit a rule for a long time after a delete and recreate, so the client id is asked for directly
+                    # The list can omit a rule for a long time after a delete and recreate, and it holds off after a timeout. The client id answers in both cases
+                    try {
+                        $ruleId = Get-CustomDetectionIdByDetectorId -DetectorId $DetectorId -ErrorAction SilentlyContinue
+                    } catch {
+                        if (-not (Test-CustomDetectionListFailure -ErrorRecord $_)) { throw }
+                        Write-Warning "The rule list did not answer. The rule is looked up by its client id only."
+                    }
                     if (-not $ruleId) {
                         $ruleId = (Get-CustomDetectionByClientId -Guid $DetectorId).id
                     }
@@ -87,7 +92,12 @@ function Remove-CustomDetection {
                     }
                 }
                 'ByDescriptionTag' {
-                    $ruleId = Get-CustomDetectionIdByDescriptionTag -DescriptionTag $DescriptionTag
+                    try {
+                        $ruleId = Get-CustomDetectionIdByDescriptionTag -DescriptionTag $DescriptionTag -ErrorAction SilentlyContinue
+                    } catch {
+                        if (-not (Test-CustomDetectionListFailure -ErrorRecord $_)) { throw }
+                        Write-Warning "The rule list did not answer. The rule is looked up by its client id only."
+                    }
                     if (-not $ruleId) {
                         $ruleId = (Get-CustomDetectionByClientId -Guid $DescriptionTag).id
                     }
