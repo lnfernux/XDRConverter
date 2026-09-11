@@ -41,4 +41,25 @@ Describe 'Get-CustomDetectionIdByDetectorId' {
     It 'Returns nothing when neither the rule id nor the tag carries the guid' {
         Get-CustomDetectionIdByDetectorId -DetectorId '00000000-0000-4000-8000-000000000000' | Should -BeNullOrEmpty
     }
+
+    It 'Names every rule when a description tag is carried twice' {
+        Mock Get-CustomDetectionIds {
+            return @(
+                [PSCustomObject]@{ Id = '48'; DetectorId = $null; DisplayName = 'One'; DescriptionTag = 'c0ffee00-1111-4222-8333-444455556666'; TagPrefix = $null }
+                [PSCustomObject]@{ Id = '49'; DetectorId = $null; DisplayName = 'Two'; DescriptionTag = 'c0ffee00-1111-4222-8333-444455556666'; TagPrefix = $null }
+            )
+        } -ModuleName XDRConverter
+
+        $result = Get-CustomDetectionIdByDetectorId -DetectorId 'c0ffee00-1111-4222-8333-444455556666' -WarningVariable warning -WarningAction SilentlyContinue
+
+        $result | Should -BeExactly '48'
+        "$warning" | Should -Match '48'
+        "$warning" | Should -Match '49'
+    }
+
+    It 'Stays quiet when no rule carries the guid' {
+        $warning = @()
+        Get-CustomDetectionIdByDetectorId -DetectorId '00000000-0000-4000-8000-000000000000' -WarningVariable warning -WarningAction SilentlyContinue | Out-Null
+        $warning.Count | Should -Be 0
+    }
 }

@@ -40,18 +40,20 @@ function Get-CustomDetectionIdByDetectorId {
             # Leverage the cached detection IDs list
             $detectionIds = Get-CustomDetectionIds
 
-            # Match the rule id in its plain and rule-prefixed forms, then the detector id the API assigned, then the description tag
+            # Match the rule id in its plain and rule-prefixed forms, then the detector id the API assigned
             $detectionRule = $detectionIds | Where-Object { $_.Id -eq $DetectorId -or $_.Id -eq "rule-$DetectorId" -or $_.DetectorId -eq $DetectorId } | Select-Object -First 1
-            if (-not $detectionRule) {
-                $detectionRule = $detectionIds | Where-Object { $_.DescriptionTag -eq $DetectorId } | Select-Object -First 1
-            }
-
             if ($detectionRule) {
                 return $detectionRule.Id
-            } else {
-                Write-Verbose "No detection rule found with detectorId: $DetectorId"
-                return $null
             }
+
+            # Then the description tag, which is how rules created before the rule id carried the guid are found
+            $taggedId = Get-CustomDetectionTaggedId -Rule @($detectionIds) -DescriptionTag $DetectorId
+            if ($taggedId) {
+                return $taggedId
+            }
+
+            Write-Verbose "No detection rule found with detectorId: $DetectorId"
+            return $null
         } catch {
             Write-Error "Error querying Microsoft Graph API: $($_.Exception.Message)"
             throw
