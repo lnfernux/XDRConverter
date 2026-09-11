@@ -567,6 +567,25 @@ Describe 'CustomDetection mapping helpers' {
 
     Context 'ConvertTo-CustomDetectionEntityMappings registry pairs' {
 
+        It 'Pairs the same registry columns whatever their order' {
+            InModuleScope XDRConverter {
+                $grouped = ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @(
+                    @{ entityType = 'RegistryKey'; entityIdentifier = 'RegistryKey' },
+                    @{ entityType = 'RegistryKey'; entityIdentifier = 'PreviousRegistryKey' },
+                    @{ entityType = 'RegistryValue'; entityIdentifier = 'RegistryValueName' },
+                    @{ entityType = 'RegistryValue'; entityIdentifier = 'PreviousRegistryValueName' }
+                )
+                $interleaved = ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @(
+                    @{ entityType = 'RegistryKey'; entityIdentifier = 'RegistryKey' },
+                    @{ entityType = 'RegistryValue'; entityIdentifier = 'RegistryValueName' },
+                    @{ entityType = 'RegistryKey'; entityIdentifier = 'PreviousRegistryKey' },
+                    @{ entityType = 'RegistryValue'; entityIdentifier = 'PreviousRegistryValueName' }
+                )
+                @($grouped.registryValues).Count | Should -Be 2
+                ($grouped.registryValues | ConvertTo-Json -Compress -Depth 5) | Should -BeExactly ($interleaved.registryValues | ConvertTo-Json -Compress -Depth 5)
+            }
+        }
+
         It 'Puts a legacy RegistryKey and RegistryValue into one registry value item' {
             InModuleScope XDRConverter {
                 $result = ConvertTo-CustomDetectionEntityMappings -ImpactedEntities @(
@@ -614,6 +633,15 @@ Describe 'CustomDetection mapping helpers' {
             }
         }
 
+        It 'Rejects a column value that is not a string' -ForEach @(
+            @{ Value = 42 }
+            @{ Value = $true }
+        ) {
+            InModuleScope XDRConverter -Parameters @{ Value = $Value } {
+                { ConvertTo-CustomDetectionEntityMappings -EntityMappings @{ hosts = @(@{ deviceIdColumn = $Value }) } } | Should -Throw '*deviceIdColumn*single column name*'
+            }
+        }
+
         It 'Rejects an explicit account mapping without a key column' {
             InModuleScope XDRConverter {
                 { ConvertTo-CustomDetectionEntityMappings -EntityMappings @{ accounts = @(@{ nameColumn = 'AccountName' }) } } | Should -Throw '*aadUserIdColumn*'
@@ -630,6 +658,28 @@ Describe 'CustomDetection mapping helpers' {
     }
 
     Context 'ConvertFrom-CustomDetectionYamlToJson input hygiene' {
+
+        It 'Lets an entityMappings key that holds nothing suppress the legacy list' {
+            InModuleScope XDRConverter {
+                $yaml = @{ guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'; ruleName = 'r'; alertTitle = 't'; frequency = 'PT1H'; alertSeverity = 'Low'; alertDescription = 'd'; alertCategory = 'Execution'; queryText = 'q'
+                    entityMappings = @{}
+                    impactedEntities = @(@{ entityType = 'Machine'; entityIdentifier = 'DeviceId' })
+                }
+                $body = ConvertFrom-CustomDetectionYamlToJson -YamlObject $yaml -WarningAction SilentlyContinue
+                $body.detectionAction.alertTemplate.Contains('entityMappings') | Should -BeFalse
+            }
+        }
+
+        It 'Keeps the legacy list when the entityMappings key carries no value' {
+            InModuleScope XDRConverter {
+                $yaml = @{ guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'; ruleName = 'r'; alertTitle = 't'; frequency = 'PT1H'; alertSeverity = 'Low'; alertDescription = 'd'; alertCategory = 'Execution'; queryText = 'q'
+                    entityMappings = $null
+                    impactedEntities = @(@{ entityType = 'Machine'; entityIdentifier = 'DeviceId' })
+                }
+                $body = ConvertFrom-CustomDetectionYamlToJson -YamlObject $yaml -WarningAction SilentlyContinue
+                $body.detectionAction.alertTemplate.entityMappings.hosts[0].deviceIdColumn | Should -BeExactly 'DeviceId'
+            }
+        }
 
         It 'Rejects an empty device group name' {
             InModuleScope XDRConverter {
@@ -700,6 +750,17 @@ Describe 'CustomDetection mapping helpers' {
     }
 
     Context 'ConvertTo-CustomDetectionLegacyYaml' {
+
+        It 'Warns that the detector id has no legacy key' {
+            InModuleScope XDRConverter {
+                $yaml = [ordered]@{ guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'; detectorId = '7cb0d5af-690e-4f63-b4b9-6b40728cac5f'; ruleName = 'r'; isEnabled = $true; alertTitle = 't'; frequency = 'PT1H'; alertSeverity = 'Low'; alertDescription = 'd'; queryText = 'q'
+                    tactics = @([ordered]@{ tactic = 'Execution' })
+                }
+                $legacy = ConvertTo-CustomDetectionLegacyYaml -YamlObject $yaml -WarningVariable w -WarningAction SilentlyContinue
+                $legacy.Keys | Should -Not -Contain 'detectorId'
+                "$w" | Should -Match 'detector id'
+            }
+        }
 
         It 'Drops a column the legacy identifiers cannot express and warns' {
             InModuleScope XDRConverter {
@@ -802,6 +863,39 @@ Describe 'CustomDetection mapping helpers' {
         It 'Returns nothing for an empty input' {
             InModuleScope XDRConverter {
                 ConvertFrom-CustomDetectionEntityMappings -EntityMappings $null | Should -BeNullOrEmpty
+            }
+        }
+
+        It 'Validates a legacy asset identifier through the JSON path' {
+            InModuleScope XDRConverter {
+                $json = [PSCustomObject]@{
+                    id              = 'rule-81fb771a-c57e-41b8-9905-63dbf267c13f'
+                    displayName     = 'r'
+                    status          = 'enabled'
+                    queryCondition  = [PSCustomObject]@{ queryText = 'q' }
+                    schedule        = [PSCustomObject]@{ frequency = 'PT1H' }
+                    detectionAction = [PSCustomObject]@{
+                        alertTemplate = [PSCustomObject]@{
+                            title          = 't'
+                            description    = 'd'
+                            severity       = 'low'
+                            tactics        = @([PSCustomObject]@{ tactic = 'Execution' })
+                            impactedAssets = @([PSCustomObject]@{ '@odata.type' = '#microsoft.graph.security.impactedDeviceAsset'; identifier = 'madeUpColumn' })
+                        }
+                    }
+                }
+                { ConvertFrom-CustomDetectionJsonToYaml -JsonObject $json -ValidateIdentifiers } | Should -Throw '*madeUpColumn*'
+                $yaml = ConvertFrom-CustomDetectionJsonToYaml -JsonObject $json -WarningAction SilentlyContinue
+                $yaml.entityMappings.hosts[0].nameColumn | Should -BeExactly 'MadeUpColumn'
+            }
+        }
+
+        It 'Validates a legacy asset identifier when the caller asks for validation' {
+            InModuleScope XDRConverter {
+                $assets = @([PSCustomObject]@{ '@odata.type' = '#microsoft.graph.security.impactedDeviceAsset'; identifier = 'madeUpColumn' })
+                { ConvertFrom-CustomDetectionEntityMappings -ImpactedAssets $assets -ValidateIdentifiers } | Should -Throw '*madeUpColumn*'
+                $result = ConvertFrom-CustomDetectionEntityMappings -ImpactedAssets $assets -WarningAction SilentlyContinue
+                $result.hosts[0].nameColumn | Should -BeExactly 'MadeUpColumn'
             }
         }
 
@@ -1072,6 +1166,24 @@ Describe 'CustomDetection mapping helpers' {
         ) {
             InModuleScope XDRConverter -Parameters @{ ActionType = $ActionType; Field = $Field } {
                 { ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = $ActionType; additionalFields = @{ $Field = 'X' } }) } | Should -Throw "*$Field*"
+            }
+        }
+
+        It 'Rejects an additionalFields value that is not a mapping' -ForEach @(
+            @{ Value = 'not-a-mapping' }
+            @{ Value = @('deviceIdColumn') }
+            @{ Value = 7 }
+        ) {
+            InModuleScope XDRConverter -Parameters @{ Value = $Value } {
+                { ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = 'IsolateMachine'; additionalFields = $Value }) } | Should -Throw '*additionalFields*'
+            }
+        }
+
+        It 'Treats an empty additionalFields as absent and keeps the defaults' {
+            InModuleScope XDRConverter {
+                $result = ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = 'IsolateMachine'; additionalFields = $null })
+                $result.isolateDevices[0].deviceIdColumn | Should -BeExactly 'DeviceId'
+                $result.isolateDevices[0].isolationType | Should -BeExactly 'full'
             }
         }
 

@@ -102,7 +102,8 @@ function ConvertFrom-CustomDetectionYamlToJson {
     $entityMappingsInput = Get-CustomDetectionValue -Object $yaml -Path 'entityMappings'
     $impactedEntities = Get-CustomDetectionValue -Object $yaml -Path 'impactedEntities'
     $entityMappings = $null
-    if (Test-CustomDetectionValue $entityMappingsInput) {
+    # A key that carries a value wins even when that value is empty, since an empty mapping is a statement that the rule maps no entity
+    if ($yaml.Contains('entityMappings') -and $null -ne $entityMappingsInput) {
         if (Test-CustomDetectionValue $impactedEntities) {
             Write-Warning 'Both entityMappings and impactedEntities are present. Using entityMappings.'
         }

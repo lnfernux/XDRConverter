@@ -31,6 +31,9 @@ function ConvertTo-CustomDetectionLegacyYaml {
     if ($yaml.Contains('status')) {
         Write-Warning "Status '$($yaml['status'])' has no legacy key. Only isEnabled is emitted."
     }
+    if ($yaml.Contains('detectorId')) {
+        Write-Warning 'The detector id has no legacy key and is dropped. The guid identifies the rule.'
+    }
     if ($yaml.Contains('description')) {
         Write-Warning 'The rule description has no legacy key and is dropped.'
     }

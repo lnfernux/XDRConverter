@@ -19,7 +19,7 @@ function ConvertFrom-CustomDetectionEntityMappings {
         [AllowNull()]
         [object[]]$ImpactedAssets,
 
-        [Parameter(ParameterSetName = 'EntityMappings')]
+        [Parameter()]
         [switch]$ValidateIdentifiers
     )
 
@@ -35,7 +35,7 @@ function ConvertFrom-CustomDetectionEntityMappings {
         if ($entities.Count -eq 0) {
             return $null
         }
-        return ConvertTo-CustomDetectionEntityMappings -ImpactedEntities $entities.ToArray() -SkipIdentifierValidation
+        return ConvertTo-CustomDetectionEntityMappings -ImpactedEntities $entities.ToArray() -SkipIdentifierValidation:(-not $ValidateIdentifiers)
     }
 
     if ($null -eq $EntityMappings) {
