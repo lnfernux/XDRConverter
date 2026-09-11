@@ -301,18 +301,11 @@ function Deploy-CustomDetection {
             }
             # The list can lag behind a create or a delete, so the client id is asked for directly before a create
             if (-not $existingRuleId) {
-                try {
-                    $byId = Get-CustomDetection -DetectionId "rule-$detectorId" -ErrorAction SilentlyContinue
-                    if ($byId -and $byId.id) {
-                        $existingRuleId = $byId.id
-                        $existingRule = $byId
-                        Write-Verbose "Found the rule through its client id '$existingRuleId', which the list did not carry."
-                    }
-                } catch {
-                    $statusCode = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
-                    if ($statusCode -ne 404 -and $_.Exception.Message -notmatch 'NotFound|\b404\b') {
-                        throw
-                    }
+                $byId = Get-CustomDetectionByClientId -Guid $detectorId
+                if ($byId) {
+                    $existingRuleId = $byId.id
+                    $existingRule = $byId
+                    Write-Verbose "Found the rule through its client id '$existingRuleId', which the list did not carry."
                 }
             }
 

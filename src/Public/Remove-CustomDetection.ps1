@@ -18,7 +18,9 @@ function Remove-CustomDetection {
     .PARAMETER DetectorId
         The guid from the source file. Resolved to the rule ID via
         Get-CustomDetectionIdByDetectorId, which matches the rule ID with or
-        without the rule prefix and then the description tag.
+        without the rule prefix, the detector ID the API assigned and then the
+        description tag. When the list does not carry the rule, the client id
+        rule-<guid> is asked for directly.
 
     .PARAMETER DescriptionTag
         The UUID tag embedded in the alert description. Resolved to the rule ID
@@ -75,6 +77,10 @@ function Remove-CustomDetection {
                 }
                 'ByDetectorId' {
                     $ruleId = Get-CustomDetectionIdByDetectorId -DetectorId $DetectorId
+                    # The list can omit a rule for a long time after a delete and recreate, so the client id is asked for directly
+                    if (-not $ruleId) {
+                        $ruleId = (Get-CustomDetectionByClientId -Guid $DetectorId).id
+                    }
                     if (-not $ruleId) {
                         Write-Error "No detection rule found with DetectorId: $DetectorId"
                         return
@@ -82,6 +88,9 @@ function Remove-CustomDetection {
                 }
                 'ByDescriptionTag' {
                     $ruleId = Get-CustomDetectionIdByDescriptionTag -DescriptionTag $DescriptionTag
+                    if (-not $ruleId) {
+                        $ruleId = (Get-CustomDetectionByClientId -Guid $DescriptionTag).id
+                    }
                     if (-not $ruleId) {
                         Write-Error "No detection rule found with DescriptionTag: $DescriptionTag"
                         return
