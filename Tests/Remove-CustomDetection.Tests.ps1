@@ -129,6 +129,22 @@ Describe 'Remove-CustomDetection' {
             $result.RuleId | Should -Be 'rule-123'
         }
 
+        It 'Should drop the deleted rule from the id cache and keep the rest' {
+            Mock Get-CustomDetection {
+                return @{ id = 'rule-789'; displayName = 'Cached Rule' }
+            } -ModuleName XDRConverter
+            Mock Invoke-MgGraphRequest {} -ModuleName XDRConverter
+            InModuleScope XDRConverter {
+                $script:DetectionIdsCache = @{ Data = @([PSCustomObject]@{ Id = 'rule-789' }, [PSCustomObject]@{ Id = 'rule-790' }); ExpiresAt = [datetime]::UtcNow.AddHours(1) }
+            }
+
+            Remove-CustomDetection -Id 'rule-789' -Confirm:$false | Out-Null
+
+            InModuleScope XDRConverter {
+                @($script:DetectionIdsCache.Data).Id | Should -Be @('rule-790')
+            }
+        }
+
         It 'Should call DELETE on the correct URI' {
             Mock Get-CustomDetection {
                 return @{ id = 'rule-456'; displayName = 'My Rule' }
@@ -193,6 +209,28 @@ Describe 'Remove-CustomDetection' {
             Should -Not -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -ParameterFilter {
                 $Method -eq 'DELETE'
             }
+        }
+    }
+
+    Context 'Delete a rule the list omits' {
+        BeforeEach {
+            $script:guid = '81fb771a-c57e-41b8-9905-63dbf267c13f'
+            Mock Get-CustomDetectionIdByDetectorId { return $null } -ModuleName XDRConverter
+            Mock Get-CustomDetectionIdByDescriptionTag { return $null } -ModuleName XDRConverter
+            Mock Get-CustomDetection { return @{ id = "rule-$script:guid"; displayName = 'Omitted' } } -ModuleName XDRConverter -ParameterFilter { $DetectionId -eq "rule-$script:guid" }
+            Mock Invoke-MgGraphRequestWithRetry {} -ModuleName XDRConverter
+        }
+
+        It 'Should delete by DetectorId through the client id when the list misses' {
+            $result = Remove-CustomDetection -DetectorId $script:guid -Confirm:$false
+            $result.Action | Should -Be 'Deleted'
+            Should -Invoke Invoke-MgGraphRequestWithRetry -ModuleName XDRConverter -Times 1 -Exactly -ParameterFilter { $Method -eq 'DELETE' -and $Uri -like "*/rule-$script:guid" }
+        }
+
+        It 'Should delete by DescriptionTag through the client id when the list misses' {
+            $result = Remove-CustomDetection -DescriptionTag $script:guid -Confirm:$false
+            $result.Action | Should -Be 'Deleted'
+            Should -Invoke Invoke-MgGraphRequestWithRetry -ModuleName XDRConverter -Times 1 -Exactly -ParameterFilter { $Method -eq 'DELETE' -and $Uri -like "*/rule-$script:guid" }
         }
     }
 

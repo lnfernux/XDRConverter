@@ -24,7 +24,9 @@ function ConvertTo-CustomDetectionJson {
         Cannot be combined with -OutputFile or -UseIdAsFilename.
 
     .PARAMETER UseIdAsFilename
-        Use the rule's detectorId (GUID) as the output filename (with .json extension).
+        Use the rule's guid as the output filename (with .json extension). The guid is
+        taken from the description tag, then from a UUID-shaped rule id, then from the
+        detector ID the API assigned.
         The file is written to -OutputFolder (or the user's temp directory if not specified).
         Cannot be combined with -OutputFile or -UseDisplayNameAsFilename.
 
@@ -33,7 +35,7 @@ function ConvertTo-CustomDetectionJson {
         Defaults to the user's temp directory ([System.IO.Path]::GetTempPath()).
 
     .PARAMETER Enabled
-        Optional. Set the isEnabled property to this value (true or false).
+        Optional. Set the rule status to enabled (true) or disabled (false).
 
     .PARAMETER Severity
         Optional. Override the alert severity. Valid values: Informational, Low, Medium, High.
@@ -58,7 +60,7 @@ function ConvertTo-CustomDetectionJson {
     .EXAMPLE
         Get-CustomDetection | ConvertTo-CustomDetectionJson -UseIdAsFilename
 
-        Writes each rule to a JSON file named after its detectorId in the user's temp directory.
+        Writes each rule to a JSON file named after its guid in the user's temp directory.
     #>
     [CmdletBinding(DefaultParameterSetName = 'File')]
     [OutputType([string])]
@@ -80,7 +82,7 @@ function ConvertTo-CustomDetectionJson {
         [Parameter(Mandatory, ParameterSetName = 'ObjectByDisplayName', HelpMessage = 'Use the display name as the output filename')]
         [switch]$UseDisplayNameAsFilename,
 
-        [Parameter(Mandatory, ParameterSetName = 'ObjectById', HelpMessage = 'Use the detectorId as the output filename')]
+        [Parameter(Mandatory, ParameterSetName = 'ObjectById', HelpMessage = 'Use the guid as the output filename')]
         [switch]$UseIdAsFilename,
 
         [Parameter(ParameterSetName = 'ObjectByDisplayName', HelpMessage = 'Folder to write the output file to')]
@@ -128,7 +130,14 @@ function ConvertTo-CustomDetectionJson {
                 $jsonObj = $InputObject
 
                 if ($PSBoundParameters.ContainsKey('Enabled')) {
-                    $jsonObj.isEnabled = $Enabled
+                    $newStatus = ConvertTo-CustomDetectionStatus -IsEnabled $Enabled
+                    if ($jsonObj -is [System.Collections.IDictionary]) {
+                        $jsonObj['status'] = $newStatus
+                        if ($jsonObj.Contains('isEnabled')) { $jsonObj['isEnabled'] = $Enabled }
+                    } else {
+                        $jsonObj | Add-Member -NotePropertyName 'status' -NotePropertyValue $newStatus -Force
+                        if ($jsonObj.PSObject.Properties['isEnabled']) { $jsonObj.isEnabled = $Enabled }
+                    }
                 }
 
                 if ($PSBoundParameters.ContainsKey('Severity')) {
@@ -146,19 +155,7 @@ function ConvertTo-CustomDetectionJson {
 
             # Determine output file path when using naming switches
             if ($UseDisplayNameAsFilename -or $UseIdAsFilename) {
-                $folder = if ($OutputFolder) { $OutputFolder } else { [System.IO.Path]::GetTempPath() }
-                if (-not (Test-Path $folder)) {
-                    New-Item -ItemType Directory -Path $folder -Force | Out-Null
-                }
-                if ($UseDisplayNameAsFilename) {
-                    # sanitize  display name for use as a filename
-                    $safeName = $jsonObj.displayName -replace '[\\/:*?"<>|]', '_'
-                    # Convert whitespace-separated words to CamelCase
-                    $safeName = ($safeName -split '\s+' | ForEach-Object { $_.Substring(0, 1).ToUpper() + $_.Substring(1) }) -join ''
-                    $OutputFile = Join-Path $folder "$safeName.json"
-                } else {
-                    $OutputFile = Join-Path $folder "$($jsonObj.detectorId).json"
-                }
+                $OutputFile = Resolve-CustomDetectionOutputFile -Rule $jsonObj -Extension '.json' -OutputFolder $OutputFolder -UseDisplayName:$UseDisplayNameAsFilename
             }
 
             # Convert to JSON string with proper formatting

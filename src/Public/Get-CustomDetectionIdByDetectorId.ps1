@@ -1,19 +1,23 @@
 function Get-CustomDetectionIdByDetectorId {
     <#
     .SYNOPSIS
-        Gets the detection rule ID by its detector ID.
+        Gets the detection rule ID by the guid from the source file.
 
     .DESCRIPTION
-        Queries Microsoft Graph API to retrieve the detection rule ID for a given detector ID.
-        This function wraps Invoke-MgGraphRequest to query the Defender XDR detection rules endpoint.
+        Looks up a detection rule whose rule ID equals the given guid, with or
+        without the rule prefix, then a rule whose detector ID the API assigned
+        equals it, then a rule whose description tag carries it, which is how
+        rules created before the rule ID carried the guid are found.
 
     .PARAMETER DetectorId
-        The detector ID (GUID) to look up.
+        The guid to look up. Matched against the rule ID in its plain and
+        rule-prefixed forms, then against the detector ID the API assigned,
+        then against the description tag.
 
     .EXAMPLE
         Get-CustomDetectionIdByDetectorId -DetectorId "81fb771a-c57e-41b8-9905-63dbf267c13f"
 
-        Returns the detection rule ID for the specified detector ID.
+        Returns the detection rule ID of the rule the guid names.
 
     .NOTES
         Requires the Microsoft.Graph.Authentication module and an active Graph API session.
@@ -36,8 +40,11 @@ function Get-CustomDetectionIdByDetectorId {
             # Leverage the cached detection IDs list
             $detectionIds = Get-CustomDetectionIds
 
-            # Find the detection rule with the matching detectorId
-            $detectionRule = $detectionIds | Where-Object { $_.DetectorId -eq $DetectorId }
+            # Match the rule id in its plain and rule-prefixed forms, then the detector id the API assigned, then the description tag
+            $detectionRule = $detectionIds | Where-Object { $_.Id -eq $DetectorId -or $_.Id -eq "rule-$DetectorId" -or $_.DetectorId -eq $DetectorId } | Select-Object -First 1
+            if (-not $detectionRule) {
+                $detectionRule = $detectionIds | Where-Object { $_.DescriptionTag -eq $DetectorId } | Select-Object -First 1
+            }
 
             if ($detectionRule) {
                 return $detectionRule.Id

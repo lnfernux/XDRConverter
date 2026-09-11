@@ -37,11 +37,14 @@ function Get-CustomDetectionIdByDescriptionTag {
             # Leverage the cached detection IDs list
             $detectionIds = Get-CustomDetectionIds
 
-            # Find the detection rule with the matching description tag
-            $detectionRule = $detectionIds | Where-Object { $_.DescriptionTag -eq $DescriptionTag }
+            # Find the detection rules with the matching description tag. One tag on two rules is a tenant defect, so the first wins and both are named
+            $detectionRules = @($detectionIds | Where-Object { $_.DescriptionTag -eq $DescriptionTag })
 
-            if ($detectionRule) {
-                return $detectionRule.Id
+            if ($detectionRules.Count -gt 1) {
+                Write-Warning "Description tag '$DescriptionTag' is carried by $($detectionRules.Count) rules ($(($detectionRules | ForEach-Object { $_.Id }) -join ', ')). The first one is used."
+            }
+            if ($detectionRules.Count -gt 0) {
+                return [string]$detectionRules[0].Id
             } else {
                 Write-Warning "No detection rule found with description tag: $DescriptionTag"
                 return $null
