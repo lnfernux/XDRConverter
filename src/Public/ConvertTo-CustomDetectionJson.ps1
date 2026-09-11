@@ -12,7 +12,10 @@ function ConvertTo-CustomDetectionJson {
         The path to the input YAML file.
 
     .PARAMETER InputObject
-        The JSON detection rule object to serialize. Accepts pipeline input.
+        A detection rule object to serialize, as returned by Get-CustomDetection.
+        Accepts pipeline input. The rule is written as the API returned it, so an
+        export keeps every property the API sends. The request body shape is
+        produced by the file input path.
 
     .PARAMETER OutputFile
         Optional. The path to the output JSON file. If not specified, output is written to stdout.

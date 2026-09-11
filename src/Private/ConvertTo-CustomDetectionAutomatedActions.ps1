@@ -93,12 +93,24 @@ function ConvertTo-CustomDetectionAutomatedActions {
                     }
                     $item[$key] = $isolationType
                 } elseif ($key -eq 'deviceGroupNames') {
-                    $item[$key] = [object[]]@($value)
+                    $groups = @($value)
+                    foreach ($group in $groups) {
+                        if ($group -isnot [string] -or [string]::IsNullOrWhiteSpace($group)) {
+                            throw "Action '$actionType' names a device group that is not a single name."
+                        }
+                    }
+                    $item[$key] = [object[]]@($groups | ForEach-Object { "$_" })
                 } else {
+                    if ($value -isnot [string]) {
+                        throw "Field '$key' of action '$actionType' must be a single column name."
+                    }
                     $item[$key] = $value
                 }
             }
         }
+
+        # Fields follow the documented order, so the same entries give the same item whatever their order in the file
+        $item = ConvertTo-CustomDetectionOrderedMap -Map $item -Order $entry.Fields
 
         # File input only. The API keeps every item it is sent, so an exact repeat is a mistake and a repeat with other fields gets a warning
         if ($PSCmdlet.ParameterSetName -eq 'Actions' -and $result.Contains($entry.Collection)) {
