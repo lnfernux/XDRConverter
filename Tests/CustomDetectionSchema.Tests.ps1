@@ -66,6 +66,82 @@ Describe 'CustomDetection schema' {
         }
     }
 
+    It 'Rejects an empty device group name, as the converter does' {
+        $rule = $script:BaseRule.Clone()
+        $rule.organizationalScope = @('')
+        (Test-Json -Json ($rule | ConvertTo-Json -Depth 5) -SchemaFile $script:SchemaFile -ErrorAction SilentlyContinue) | Should -BeFalse
+        $rule.organizationalScope = @('Servers')
+        (Test-Json -Json ($rule | ConvertTo-Json -Depth 5) -SchemaFile $script:SchemaFile -ErrorAction SilentlyContinue) | Should -BeTrue
+    }
+
+    It 'Rejects an account mapping without a key column, as the converter does' {
+        $rule = $script:BaseRule.Clone()
+        $rule.entityMappings = @{ accounts = @(@{ nameColumn = 'AccountName' }) }
+        (Test-Json -Json ($rule | ConvertTo-Json -Depth 5) -SchemaFile $script:SchemaFile -ErrorAction SilentlyContinue) | Should -BeFalse
+        InModuleScope XDRConverter {
+            { ConvertTo-CustomDetectionEntityMappings -EntityMappings @{ accounts = @(@{ nameColumn = 'AccountName' }) } } | Should -Throw '*aadUserIdColumn*'
+        }
+    }
+
+    It 'Accepts an account mapping the API accepts' -ForEach @(
+        @{ Columns = @{ sidColumn = 'AccountSid' } }
+        @{ Columns = @{ aadUserIdColumn = 'AccountObjectId' } }
+        @{ Columns = @{ upnColumn = 'AccountUpn' } }
+        @{ Columns = @{ nameColumn = 'AccountName'; ntDomainColumn = 'AccountDomain' } }
+    ) {
+        $rule = $script:BaseRule.Clone()
+        $rule.entityMappings = @{ accounts = @($Columns) }
+        (Test-Json -Json ($rule | ConvertTo-Json -Depth 5) -SchemaFile $script:SchemaFile -ErrorAction SilentlyContinue) | Should -BeTrue -Because ($Columns.Keys -join ', ')
+    }
+
+    It 'Rejects a field the action type does not document, as the converter does' -ForEach @(
+        @{ ActionType = 'IsolateMachine'; Field = 'recipientColumn' }
+        @{ ActionType = 'StopAndQuarantineFile'; Field = 'sha256Column' }
+        @{ ActionType = 'DisableUser'; Field = 'deviceIdColumn' }
+        @{ ActionType = 'RunAntivirusScan'; Field = 'isolationType' }
+        @{ ActionType = 'HardDeleteEmail'; Field = 'accountSidColumn' }
+    ) {
+        $rule = $script:BaseRule.Clone()
+        $rule.actions = @(@{ actionType = $ActionType; additionalFields = @{ $Field = 'X' } })
+        (Test-Json -Json ($rule | ConvertTo-Json -Depth 5) -SchemaFile $script:SchemaFile -ErrorAction SilentlyContinue) | Should -BeFalse -Because "$ActionType with $Field"
+        InModuleScope XDRConverter -Parameters @{ ActionType = $ActionType; Field = $Field } {
+            { ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = $ActionType; additionalFields = @{ $Field = 'X' } }) } | Should -Throw "*$Field*"
+        }
+    }
+
+    It 'Accepts every field the module documents for an action' {
+        $map = InModuleScope XDRConverter { Get-CustomDetectionActionMap }
+        foreach ($entry in $map) {
+            $fields = @{}
+            foreach ($field in $entry.Fields) {
+                # A file action carries one hash column, so the sample names sha1Column alone
+                if ($field -eq 'sha256Column') { continue }
+                if ($field -eq 'isolationType') { $fields[$field] = 'Full'; continue }
+                if ($field -eq 'deviceGroupNames') { $fields[$field] = [string[]]@('Servers', 'Workstations'); continue }
+                $fields[$field] = 'Col'
+            }
+            $rule = $script:BaseRule.Clone()
+            $rule.actions = @(@{ actionType = $entry.ActionType; additionalFields = $fields })
+            (Test-Json -Json ($rule | ConvertTo-Json -Depth 6) -SchemaFile $script:SchemaFile -ErrorAction SilentlyContinue) | Should -BeTrue -Because $entry.ActionType
+
+            InModuleScope XDRConverter -Parameters @{ ActionType = $entry.ActionType; Fields = $fields } {
+                { ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = $ActionType; additionalFields = $Fields }) } | Should -Not -Throw
+            }
+        }
+    }
+
+    It 'Rejects a file action that names both hash columns, as the converter does' -ForEach @(
+        @{ ActionType = 'AllowFile' }
+        @{ ActionType = 'BlockFile' }
+    ) {
+        $rule = $script:BaseRule.Clone()
+        $rule.actions = @(@{ actionType = $ActionType; additionalFields = @{ sha1Column = 'SHA1'; sha256Column = 'SHA256' } })
+        (Test-Json -Json ($rule | ConvertTo-Json -Depth 6) -SchemaFile $script:SchemaFile -ErrorAction SilentlyContinue) | Should -BeFalse -Because $ActionType
+        InModuleScope XDRConverter -Parameters @{ ActionType = $ActionType } {
+            { ConvertTo-CustomDetectionAutomatedActions -Actions @(@{ actionType = $ActionType; additionalFields = @{ sha1Column = 'SHA1'; sha256Column = 'SHA256' } }) } | Should -Throw '*one hash column*'
+        }
+    }
+
     It 'Accepts every documented column of every collection' {
         $expected = InModuleScope XDRConverter { Get-CustomDetectionEntityMappingColumns }
         foreach ($name in $expected.Keys) {

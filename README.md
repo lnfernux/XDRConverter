@@ -103,6 +103,7 @@ Converts a JSON Defender XDR detection file to YAML format. Properties not defin
 | OutputFolder | String | No | Folder for output when using `-UseDisplayNameAsFilename` or `-UseIdAsFilename` (defaults to temp directory) |
 | Enabled | Boolean | No | Set the rule status to enabled (`$true`) or disabled (`$false`) |
 | Severity | String | No | Override the alert severity (`Informational`, `Low`, `Medium`, `High`) |
+| LegacyKeys | Switch | No | Emit the 1.4.1 YAML keys. Values the legacy keys cannot express are dropped with a warning |
 
 #### Examples
 
@@ -581,6 +582,14 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - `Remove-CustomDetection -DetectorId` and `-DescriptionTag` ask for the client id `rule-<guid>` directly when the list does not carry the rule, as the deploy does before a create
 - A description tag carried by more than one rule produces a warning naming the rules, and the first one is used. It used to hand the deploy a list of ids, which stopped it with a type error
 - An `organizationalScope` whose only entry is empty is rejected. It used to deploy the rule without a scope
+- A description tag carried by more than one rule is named in a warning whichever lookup finds the rule
+- An `additionalFields` value that is not a mapping, and an entity mapping column that is not a single name, are rejected. They used to be ignored, so the action deployed with its defaults and the column went to the API as a number
+- An `entityMappings` key that carries an empty mapping keeps a legacy `impactedEntities` list out of the request, since an empty mapping states that the rule maps no entity
+- The identifier validation choice reaches legacy JSON assets, so a `.json` and a `.yaml` file holding the same unsupported identifier are judged alike
+- A legacy registry key and value name pair into one registry value item whatever their order in the file
+- `Remove-CustomDetection` asks for the client id when the rule list does not answer, which is when a rule most needs removing
+- The editor schema rejects an empty device group name, an account mapping without a key column or a name and domain pair, a field the action type does not document, and a file action that names both hash columns
+- The legacy export warns that the detector id is dropped, as it does for the values the other current keys carry
 - Bugs/issues or undocumented behavior identified while testing: 
    - `PT0S` and non-MITRE tactic names such as `SuspiciousActivity` are accepted on create
    - `autoDisabled` is rejected on write and is sent as `disabled`
