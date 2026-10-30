@@ -12,6 +12,10 @@ function Remove-CustomDetection {
 
         Only one identification method may be used per call (parameter sets).
 
+        The id of a deleted rule is kept for the module session. A GET can
+        return a deleted rule for a while, and Deploy-CustomDetection throws
+        instead of trusting it.
+
     .PARAMETER Id
         The detection rule ID as returned by the Graph API.
 
@@ -124,6 +128,7 @@ function Remove-CustomDetection {
                 $uri = "$baseUri/$ruleId"
                 Invoke-MgGraphRequestWithRetry -Method DELETE -Uri $uri | Out-Null
                 Clear-CustomDetectionIdsCacheEntry -Id $ruleId
+                [void]$script:DeletedRuleIds.Add($ruleId)
                 Write-Verbose "Deleted rule '$ruleName' (Id: $ruleId)."
 
                 [PSCustomObject]@{

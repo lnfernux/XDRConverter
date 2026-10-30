@@ -17,6 +17,9 @@ $script:DetectionIdsCache = @{
     FailedAt  = $null
 }
 
+# Rule ids this session deleted. A GET can return a deleted rule for a while, so a deploy does not trust it
+$script:DeletedRuleIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
 # Dot-source private then public functions via auto-discovery
 foreach ($scope in 'Private', 'Public') {
     $scopePath = Join-Path -Path $script:ModuleRoot -ChildPath $scope

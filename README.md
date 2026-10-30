@@ -128,7 +128,7 @@ Get-CustomDetection | ConvertTo-CustomDetectionYaml -UseIdAsFilename
 
 ### Deploy-CustomDetection
 
-Creates or updates a Defender XDR custom detection rule from a YAML or JSON file via the Microsoft Graph API. New rules are sent with the rule id `rule-<guid>`, and the YAML `guid` also travels in the description tag. The cmdlet requires a guid in the file. The API itself does not. The Graph reference marks the id as required, but live testing showed the API assigns one when none is sent and rejects one that starts with a digit. The cmdlet detects whether the rule already exists (by rule id, by description tag, or by display name with `-NoDescriptionTag`, and by a direct request for `rule-<guid>` when the rule list carries none of them) and issues a PATCH (update) or POST (create) accordingly. When the rule list does not answer, the rule is looked up by its client id only, and a rule not found that way is reported instead of created. Before updating, it compares the local rule against the remote version and skips the call when nothing changed. The comparison covers every managed property, including tactics, entity mappings, automated actions and device groups.
+Creates or updates a Defender XDR custom detection rule from a YAML or JSON file via the Microsoft Graph API. New rules are sent with the rule id `rule-<guid>`, and the YAML `guid` also travels in the description tag. The cmdlet requires a guid in the file. The API itself does not. The Graph reference marks the id as required, but live testing showed the API assigns one when none is sent and rejects one that starts with a digit. The cmdlet detects whether the rule already exists (by rule id, by description tag, or by display name with `-NoDescriptionTag`, and by a direct request for `rule-<guid>` when the rule list carries none of them) and issues a PATCH (update) or POST (create) accordingly. When the rule list does not answer, the rule is looked up by its client id only, and a rule not found that way is reported instead of created. Before updating, it compares the local rule against the remote version and skips the call when nothing changed. The comparison covers every managed property, including tactics, entity mappings, automated actions and device groups. An id the rule list names that answers NotFound is treated as absent, so the rule is created. A GET can return a rule for a while after its delete. When the rule found is one that `Remove-CustomDetection` deleted in the same session, nothing is written and the deploy throws. Deploy again once a GET for the id answers 404.
 
 #### Parameters
 
@@ -339,7 +339,7 @@ Get-CustomDetectionIdByDescriptionTag -DescriptionTag '81fb771a-c57e-41b8-9905-6
 
 ### Remove-CustomDetection
 
-Deletes a custom detection rule from Microsoft Defender XDR. The rule can be identified by its detection rule ID, by the guid from the source file (matched against the rule ID with or without the `rule-` prefix), or by the DescriptionTag UUID appended to the alert description during deployment.
+Deletes a custom detection rule from Microsoft Defender XDR. The rule can be identified by its detection rule ID, by the guid from the source file (matched against the rule ID with or without the `rule-` prefix), or by the DescriptionTag UUID appended to the alert description during deployment. The id of a deleted rule is kept for the module session, so `Deploy-CustomDetection` does not take a stale read of it for the live rule.
 
 #### Parameters
 
@@ -550,10 +550,13 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - `lookback` is normalised to the form the API stores, as `frequency` is
 - `ConvertTo-CustomDetectionYaml` emits the three keys only when they differ from the value the API assigns. `-LegacyKeys` drops them with a warning
 - A rule may list more than one tactic. The techniques of each tactic are still validated against that tactic
+- `Deploy-CustomDetection` creates a rule when the id the rule list names answers NotFound. It used to stop with the NotFound error
+- `Deploy-CustomDetection` throws for a rule that `Remove-CustomDetection` deleted in the same session while a GET still returns it ([#15](https://github.com/f-bader/XDRConverter/issues/15)). It used to report `Skipped` and leave the rule absent
 - Behaviour observed while testing:
    - Every rule carries `schedule.lookback` and `alertTemplate.eventGroupingKind`. A request that omits them keeps the stored values, and a `null` lookback is ignored
    - A default lookback follows a frequency change. A set lookback stays
    - The API accepts more than one tactic per rule, with or without techniques
+   - A GET can return a deleted rule for more than 35 minutes while a repeated DELETE answers NotFound
 
 ### 2.0.0
 

@@ -30,6 +30,7 @@ Describe 'Deploy-CustomDetection' {
         Mock Get-CustomDetection { return @() } -ModuleName XDRConverter
         # The module keeps the id cache between calls, so every test starts from an empty one
         InModuleScope XDRConverter { $script:DetectionIdsCache = @{ Data = $null; ExpiresAt = [datetime]::MinValue; FailedAt = $null } }
+        InModuleScope XDRConverter { if ($null -ne $script:DeletedRuleIds) { $script:DeletedRuleIds.Clear() } }
     }
 
     Context 'Parameter Validation' {
@@ -1476,6 +1477,119 @@ queryText: DeviceEvents
 
             ($testYaml -replace 'T1547\.001', 'T1059.001') | Out-File -FilePath $tempFile -Encoding UTF8
             { Deploy-CustomDetection -InputFile $tempFile -Confirm:$false -WarningAction SilentlyContinue -ErrorAction Stop } | Should -Throw '*T1059.001*'
+        }
+    }
+
+    Context 'Stale reads' {
+
+        BeforeEach {
+            $script:staleGuid = '81fb771a-c57e-41b8-9905-63dbf267c13f'
+            $script:staleId = "rule-$script:staleGuid"
+            $staleYaml = @"
+guid: $script:staleGuid
+ruleName: TEST-Stale
+isEnabled: true
+alertTitle: Stale Alert
+frequency: 1H
+alertSeverity: Low
+alertDescription: Stale description
+alertCategory: Execution
+queryText: DeviceEvents | take 1
+"@
+            $script:staleFile = Join-Path TestDrive: 'stale.yaml'
+            $staleYaml | Out-File -FilePath $script:staleFile -Encoding UTF8
+            # The rule as the API returns it, identical to the file, so a redeploy reaches the unchanged comparison
+            $script:staleRule = @{
+                id              = $script:staleId
+                displayName     = 'TEST-Stale'
+                status          = 'enabled'
+                queryCondition  = @{ queryText = 'DeviceEvents | take 1' }
+                schedule        = @{ frequency = 'PT1H' }
+                detectionAction = @{ alertTemplate = @{ title = 'Stale Alert'; description = "Stale description [$script:staleGuid]"; severity = 'low'; tactics = @(@{ tactic = 'Execution' }) } }
+            }
+            Mock Get-CustomDetectionIdByDescriptionTag { return $null } -ModuleName XDRConverter
+            Mock Get-CustomDetection { return $script:staleRule } -ModuleName XDRConverter -ParameterFilter { $DetectionId -eq $script:staleId }
+            Mock Invoke-MgGraphRequest { return @{ id = $script:staleId } } -ModuleName XDRConverter
+        }
+
+        It 'Skips the unchanged rule when nothing deleted it in this session' {
+            $result = Deploy-CustomDetection -InputFile $script:staleFile -Confirm:$false
+            $result.Action | Should -Be 'Skipped'
+            $result.Reason | Should -Be 'No changes detected'
+        }
+
+        It 'Throws instead of reporting Skipped when a deleted rule still answers a GET unchanged' {
+            $removed = Remove-CustomDetection -Id $script:staleId -Confirm:$false
+            $removed.Action | Should -Be 'Deleted'
+            Should -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -Times 1 -Exactly -ParameterFilter { $Method -eq 'DELETE' }
+
+            { Deploy-CustomDetection -InputFile $script:staleFile -Confirm:$false -ErrorAction SilentlyContinue } |
+                Should -Throw "Graph still returns rule $script:staleId, deleted earlier in this session. Nothing was written.*"
+            Should -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -Times 0 -Exactly -ParameterFilter { $Method -in @('POST', 'PATCH') }
+        }
+
+        It 'Throws instead of updating when a deleted rule still answers a GET with other values, -Force included' {
+            Remove-CustomDetection -Id $script:staleId -Confirm:$false | Out-Null
+            $script:staleRule.queryCondition.queryText = 'DeviceEvents | take 2'
+
+            { Deploy-CustomDetection -InputFile $script:staleFile -Confirm:$false -Force -ErrorAction SilentlyContinue } | Should -Throw '*deleted earlier in this session*'
+            Should -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -Times 0 -Exactly -ParameterFilter { $Method -in @('POST', 'PATCH') }
+        }
+
+        It 'Forgets the delete once the GET answers NotFound and creates the rule' {
+            Remove-CustomDetection -Id $script:staleId -Confirm:$false | Out-Null
+            Mock Get-CustomDetection { throw 'Response status code does not indicate success: NotFound (Not Found).' } -ModuleName XDRConverter -ParameterFilter { $DetectionId -eq $script:staleId }
+
+            # The NotFound answer alone clears the record, so a rule recreated elsewhere later is not held back
+            Deploy-CustomDetection -InputFile $script:staleFile -WhatIf | Out-Null
+            Should -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -Times 0 -Exactly -ParameterFilter { $Method -eq 'POST' }
+            InModuleScope XDRConverter -Parameters @{ Id = $script:staleId } {
+                $script:DeletedRuleIds.Contains($Id) | Should -BeFalse
+            }
+
+            $result = Deploy-CustomDetection -InputFile $script:staleFile -Confirm:$false
+            $result.Action | Should -Be 'Created'
+            Should -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -Times 1 -Exactly -ParameterFilter { $Method -eq 'POST' }
+        }
+
+        It 'Creates the rule without a throw when the list still names a deleted id that answers NotFound' {
+            InModuleScope XDRConverter { [void]$script:DeletedRuleIds.Add('gone-id') }
+            Mock Get-CustomDetectionIdByDetectorId { return 'gone-id' } -ModuleName XDRConverter
+            Mock Get-CustomDetection { throw 'Response status code does not indicate success: NotFound (Not Found).' } -ModuleName XDRConverter -ParameterFilter { $DetectionId -in @('gone-id', $script:staleId) }
+
+            $result = Deploy-CustomDetection -InputFile $script:staleFile -Confirm:$false
+            $result.Action | Should -Be 'Created'
+            Should -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -Times 1 -Exactly -ParameterFilter { $Method -eq 'POST' }
+            InModuleScope XDRConverter {
+                $script:DeletedRuleIds.Contains('gone-id') | Should -BeFalse
+            }
+        }
+
+        It 'Creates the rule when the id the list names answers NotFound' {
+            InModuleScope XDRConverter {
+                $script:DetectionIdsCache = @{
+                    Data      = @([PSCustomObject]@{ Id = 'gone-id'; DetectorId = 'assigned-0'; DisplayName = 'TEST-Stale'; DescriptionTag = '81fb771a-c57e-41b8-9905-63dbf267c13f'; TagPrefix = $null })
+                    ExpiresAt = [datetime]::UtcNow.AddHours(1)
+                    FailedAt  = $null
+                }
+            }
+            Mock Get-CustomDetectionIdByDetectorId { return 'gone-id' } -ModuleName XDRConverter
+            Mock Get-CustomDetection { throw 'Response status code does not indicate success: NotFound (Not Found).' } -ModuleName XDRConverter -ParameterFilter { $DetectionId -in @('gone-id', $script:staleId) }
+
+            $result = Deploy-CustomDetection -InputFile $script:staleFile -Confirm:$false
+            $result.Action | Should -Be 'Created'
+            Should -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -Times 1 -Exactly -ParameterFilter { $Method -eq 'POST' }
+            InModuleScope XDRConverter {
+                @($script:DetectionIdsCache.Data).Id | Should -Not -Contain 'gone-id'
+            }
+        }
+
+        It 'Still fails when the id the list names fails for another reason' {
+            Mock Get-CustomDetectionIdByDetectorId { return 'denied-id' } -ModuleName XDRConverter
+            Mock Get-CustomDetection { throw 'Response status code does not indicate success: Forbidden (Forbidden).' } -ModuleName XDRConverter -ParameterFilter { $DetectionId -eq 'denied-id' }
+
+            { Deploy-CustomDetection -InputFile $script:staleFile -Confirm:$false -ErrorAction Stop } | Should -Throw '*Forbidden*'
+            Should -Invoke Invoke-MgGraphRequest -ModuleName XDRConverter -Times 0 -Exactly -ParameterFilter { $Method -eq 'POST' }
         }
     }
 }

@@ -24,6 +24,7 @@ Describe 'Remove-CustomDetection' {
         Mock Get-CustomDetectionIdByDetectorId { return $null } -ModuleName XDRConverter
         Mock Get-CustomDetectionIdByDescriptionTag { return $null } -ModuleName XDRConverter
         Mock Get-CustomDetection { return $null } -ModuleName XDRConverter
+        InModuleScope XDRConverter { if ($null -ne $script:DeletedRuleIds) { $script:DeletedRuleIds.Clear() } }
     }
 
     Context 'Parameter Validation' {
@@ -142,6 +143,32 @@ Describe 'Remove-CustomDetection' {
 
             InModuleScope XDRConverter {
                 @($script:DetectionIdsCache.Data).Id | Should -Be @('rule-790')
+            }
+        }
+
+        It 'Should remember the deleted id for the session' {
+            Mock Get-CustomDetection {
+                return @{ id = 'rule-321'; displayName = 'Remembered Rule' }
+            } -ModuleName XDRConverter
+            Mock Invoke-MgGraphRequest {} -ModuleName XDRConverter
+
+            Remove-CustomDetection -Id 'rule-321' -Confirm:$false | Out-Null
+
+            InModuleScope XDRConverter {
+                $script:DeletedRuleIds.Contains('rule-321') | Should -BeTrue
+            }
+        }
+
+        It 'Should not remember an id whose delete failed' {
+            Mock Get-CustomDetection {
+                return @{ id = 'rule-654'; displayName = 'Failed Rule' }
+            } -ModuleName XDRConverter
+            Mock Invoke-MgGraphRequest { throw 'Graph API error' } -ModuleName XDRConverter
+
+            { Remove-CustomDetection -Id 'rule-654' -Confirm:$false -ErrorAction SilentlyContinue } | Should -Throw
+
+            InModuleScope XDRConverter {
+                $script:DeletedRuleIds.Contains('rule-654') | Should -BeFalse
             }
         }
 
