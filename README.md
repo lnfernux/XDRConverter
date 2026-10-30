@@ -387,7 +387,7 @@ The Graph API deprecated several `detectionRule` properties and removes them on 
 | alertDescription | Yes | `detectionAction.alertTemplate.description` | The description tag is appended on deploy |
 | alertRecommendedAction | No | `detectionAction.alertTemplate.recommendedActions` | A value the file does not set is left unchanged on the rule |
 | eventGroupingKind | No | `detectionAction.alertTemplate.eventGroupingKind` | `alertPerEvent` or `singleAlert`, matched without case. Sent only when the file sets it, otherwise the rule keeps its value. A new rule gets `alertPerEvent` |
-| tactics | One of | `detectionAction.alertTemplate.tactics` | One `{ tactic, techniques }` entry. The API rejects more than one tactic per rule. Techniques may be plain ids or `{ technique, subTechniques }`. Wins over `alertCategory` and `mitreTechniques` |
+| tactics | One of | `detectionAction.alertTemplate.tactics` | List of `{ tactic, techniques }` entries. Techniques may be plain ids or `{ technique, subTechniques }`, and each tactic's techniques are validated against that tactic. Wins over `alertCategory` and `mitreTechniques` |
 | alertCategory | One of | `detectionAction.alertTemplate.tactics[0].tactic` | Legacy. Becomes the single tactic |
 | mitreTechniques | No | `detectionAction.alertTemplate.tactics[0].techniques` | Legacy flat list. Sub-techniques are grouped under their parent technique |
 | entityMappings | No | `detectionAction.alertTemplate.entityMappings` | Object keyed by entity collection (`accounts`, `hosts`, `mailboxes`, `files`, `ips`, `urls`, ...) holding column mappings. Wins over `impactedEntities` |
@@ -549,9 +549,11 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - New optional YAML keys `lookback`, `eventGroupingKind` and `isExcludedFromIncidentCorrelation`, written to `schedule.lookback`, `detectionAction.alertTemplate.eventGroupingKind` and `detectionAction.incidentConfiguration.isExcludedFromIncidentCorrelation`. They reach the request and the change detection only when the file sets them, so a file without them never reports an update
 - `lookback` is normalised to the form the API stores, as `frequency` is
 - `ConvertTo-CustomDetectionYaml` emits the three keys only when they differ from the value the API assigns. `-LegacyKeys` drops them with a warning
+- A rule may list more than one tactic. The techniques of each tactic are still validated against that tactic
 - Behaviour observed while testing:
    - Every rule carries `schedule.lookback` and `alertTemplate.eventGroupingKind`. A request that omits them keeps the stored values, and a `null` lookback is ignored
    - A default lookback follows a frequency change. A set lookback stays
+   - The API accepts more than one tactic per rule, with or without techniques
 
 ### 2.0.0
 

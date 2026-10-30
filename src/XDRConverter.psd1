@@ -26,7 +26,7 @@
             Tags         = @('XDR', 'Defender', 'Detection', 'YAML', 'JSON', 'Security', 'MITRE')
             LicenseUri   = ''
             ProjectUri   = 'https://github.com/f-bader/XDRConverter'
-            ReleaseNotes = 'Version 2.1.0: Add the lookback, eventGroupingKind and isExcludedFromIncidentCorrelation YAML keys.'
+            ReleaseNotes = 'Version 2.1.0: Add the lookback, eventGroupingKind and isExcludedFromIncidentCorrelation YAML keys, and accept more than one tactic per rule.'
         }
     }
 }

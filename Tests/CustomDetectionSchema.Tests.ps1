@@ -183,4 +183,11 @@ Describe 'CustomDetection schema' {
             { ConvertFrom-CustomDetectionYamlToJson -YamlObject $Rule } | Should -Throw "*$Key*"
         }
     }
+
+    It 'Accepts more than one tactic' {
+        $rule = $script:BaseRule.Clone()
+        $rule.Remove('alertCategory')
+        $rule.tactics = @(@{ tactic = 'Execution'; techniques = @('T1059.001') }, @{ tactic = 'Persistence' })
+        (Test-Json -Json ($rule | ConvertTo-Json -Depth 5) -SchemaFile $script:SchemaFile -ErrorAction SilentlyContinue) | Should -BeTrue
+    }
 }

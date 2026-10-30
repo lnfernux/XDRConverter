@@ -1438,4 +1438,44 @@ queryText: DeviceEvents | take 1
             $script:CapturedBody.detectionAction.alertTemplate.Keys | Should -Not -Contain 'eventGroupingKind'
         }
     }
+
+    Context 'Several tactics' {
+
+        BeforeEach {
+            Mock Invoke-MgGraphRequest {
+                $script:CapturedBody = $Body
+                $script:CapturedMethod = $Method
+                return @{ id = 'rule-81fb771a-c57e-41b8-9905-63dbf267c13f' }
+            } -ModuleName XDRConverter
+            Mock Get-CustomDetectionIdByDescriptionTag { return $null } -ModuleName XDRConverter
+        }
+
+        It 'Creates a rule with two tactics and validates the techniques of each' {
+            $testYaml = @"
+guid: 81fb771a-c57e-41b8-9905-63dbf267c13f
+ruleName: TEST-TwoTactics
+alertTitle: Two
+frequency: 1H
+alertSeverity: Low
+alertDescription: Two tactics
+tactics:
+  - tactic: Execution
+    techniques:
+      - T1059.001
+  - tactic: Persistence
+    techniques:
+      - T1547.001
+queryText: DeviceEvents
+"@
+            $tempFile = Join-Path TestDrive: 'two-tactics.yaml'
+            $testYaml | Out-File -FilePath $tempFile -Encoding UTF8
+
+            $result = Deploy-CustomDetection -InputFile $tempFile -Confirm:$false
+            $result.Action | Should -Be 'Created'
+            @($script:CapturedBody.detectionAction.alertTemplate.tactics).tactic | Should -Be @('Execution', 'Persistence')
+
+            ($testYaml -replace 'T1547\.001', 'T1059.001') | Out-File -FilePath $tempFile -Encoding UTF8
+            { Deploy-CustomDetection -InputFile $tempFile -Confirm:$false -WarningAction SilentlyContinue -ErrorAction Stop } | Should -Throw '*T1059.001*'
+        }
+    }
 }

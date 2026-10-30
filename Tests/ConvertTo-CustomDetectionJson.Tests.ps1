@@ -439,16 +439,23 @@ queryText: DeviceEvents
             "$warning" | Should -Not -Match 'detectorId'
         }
 
-        It 'Throws when more than one tactic is listed because the API accepts a single tactic' {
+        It 'Carries every tactic when more than one is listed' {
             $yaml = $baseYaml + @"
 
 frequency: 1H
 tactics:
   - tactic: Persistence
+    techniques:
+      - T1547.001
   - tactic: Execution
 "@
             $file = New-YamlFile -Name 'tactics-multi.yaml' -Content $yaml
-            { ConvertTo-CustomDetectionJson -InputFile $file } | Should -Throw '*single tactic*'
+            $result = ConvertTo-CustomDetectionJson -InputFile $file -WarningAction SilentlyContinue | ConvertFrom-Json
+            $tactics = @($result.detectionAction.alertTemplate.tactics)
+            $tactics.Count | Should -Be 2
+            $tactics[0].tactic | Should -Be 'Persistence'
+            $tactics[0].techniques[0].subTechniques | Should -Be @('T1547.001')
+            $tactics[1].tactic | Should -Be 'Execution'
         }
 
         It 'Throws when neither alertCategory nor tactics is present' {

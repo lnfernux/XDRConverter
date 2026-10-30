@@ -351,4 +351,13 @@ Describe 'Compare-CustomDetection' {
             Compare-CustomDetection -Local $LocalBody -Remote $RemoteRule | Should -Be $false
         }
     }
+
+    It 'Ignores the order of several tactics' {
+        $tactics = @(@{ tactic = 'Execution'; techniques = @('T1059') }, @{ tactic = 'Persistence' })
+        $local = New-LocalBody -Overrides @{ 'detectionAction.alertTemplate.tactics' = $tactics }
+        $remote = New-LocalBody -Overrides @{ 'detectionAction.alertTemplate.tactics' = @($tactics[1], $tactics[0]) }
+        InModuleScope XDRConverter -Parameters @{ Local = $local; Remote = $remote } {
+            Compare-CustomDetection -Local $Local -Remote $Remote | Should -Be $false
+        }
+    }
 }

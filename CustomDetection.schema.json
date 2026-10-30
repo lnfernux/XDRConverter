@@ -149,9 +149,8 @@
         },
         "tactics": {
             "type": "array",
-            "description": "The tactic with its techniques. Wins over alertCategory and mitreTechniques. The API accepts one tactic per rule",
+            "description": "The tactics with their techniques. Wins over alertCategory and mitreTechniques",
             "minItems": 1,
-            "maxItems": 1,
             "items": {
                 "type": "object",
                 "properties": {

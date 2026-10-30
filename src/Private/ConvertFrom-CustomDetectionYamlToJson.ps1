@@ -107,9 +107,6 @@ function ConvertFrom-CustomDetectionYamlToJson {
     if ($tactics.Count -eq 0) {
         throw 'The rule needs an alertCategory or a tactics list.'
     }
-    if ($tactics.Count -gt 1) {
-        throw "The rule lists $($tactics.Count) tactics. The API accepts a single tactic per rule."
-    }
     $alertTemplate['tactics'] = [object[]]$tactics
 
     $entityMappingsInput = Get-CustomDetectionValue -Object $yaml -Path 'entityMappings'
