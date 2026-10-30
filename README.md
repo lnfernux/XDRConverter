@@ -555,7 +555,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - `Get-CustomDetectionIds` asks the rule list again without the deprecated `detectorId` when the API answers the first page with BadRequest, warns once and leaves it out for the rest of the session. Lookups go on by rule ID and description tag. It used to fail every list request, and every deploy with it, on an API without the property
 - Behaviour observed while testing:
    - Every rule carries `schedule.lookback` and `alertTemplate.eventGroupingKind`. A request that omits them keeps the stored values, and a `null` lookback is ignored
-   - A default lookback follows a frequency change. A set lookback stays
+   - A frequency change deployed through `Deploy-CustomDetection` kept the stored default lookback, `PT4H` at a new frequency of `PT3H`. A set lookback stays as well. Set `lookback` together with a new frequency
    - The API accepts more than one tactic per rule, with or without techniques
    - A GET can return a deleted rule for more than 35 minutes while a repeated DELETE answers NotFound
 
