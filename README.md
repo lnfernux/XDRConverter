@@ -268,11 +268,11 @@ Get-CustomDetection -DetectionId '81fb771a-c57e-41b8-9905-63dbf267c13f' |
 
 ### Get-CustomDetectionIds
 
-Lists detection rule IDs with their description tags and tag prefixes. Results are cached for the specified duration (default: 60 minutes) to reduce API calls. A created rule is added to the cache and a deleted rule is removed from it, so a run that creates many rules asks the list once. A list request that times out is asked once more. After a failed retry the cmdlet throws at once for five minutes, unless `-Force` is set.
+Lists detection rule IDs with their description tags and tag prefixes. Results are cached for the specified duration (default: 60 minutes) to reduce API calls. A created rule is added to the cache and a deleted rule is removed from it, so a run that creates many rules asks the list once. A list request that times out is asked once more. After a failed retry the cmdlet throws at once for five minutes, unless `-Force` is set. The list asks for the deprecated `detectorId`. When the API rejects it, the list is asked again without it and leaves it out for the rest of the session, with a warning.
 
 The output includes:
 - **Id**: The detection rule ID
-- **DetectorId**: The detector ID the API assigned to the rule
+- **DetectorId**: The detector ID the API assigned to the rule. Empty once the API rejects the deprecated property
 - **DisplayName**: The rule name
 - **DescriptionTag**: The UUID extracted from the description tag (e.g., from `[PREFIX:uuid]` or `[uuid]`)
 - **TagPrefix**: The prefix text from the description tag (e.g., `PREFIX` from `[PREFIX:uuid]`, or `$null` if no prefix)
@@ -301,7 +301,7 @@ Get-CustomDetectionIds -CacheTtlMinutes 10
 
 ### Get-CustomDetectionIdByDetectorId
 
-Returns the detection rule ID for a given guid. The guid is matched against the rule ID in its plain and `rule-` prefixed forms, then against the detector ID the API assigned, then against the description tag. Uses the cached output of `Get-CustomDetectionIds`.
+Returns the detection rule ID for a given guid. The guid is matched against the rule ID in its plain and `rule-` prefixed forms, then against the detector ID the API assigned while the list carries it, then against the description tag. Uses the cached output of `Get-CustomDetectionIds`.
 
 #### Parameters
 
@@ -552,6 +552,7 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 - A rule may list more than one tactic. The techniques of each tactic are still validated against that tactic
 - `Deploy-CustomDetection` creates a rule when the id the rule list names answers NotFound. It used to stop with the NotFound error
 - `Deploy-CustomDetection` throws for a rule that `Remove-CustomDetection` deleted in the same session while a GET still returns it ([#15](https://github.com/f-bader/XDRConverter/issues/15)). It used to report `Skipped` and leave the rule absent
+- `Get-CustomDetectionIds` asks the rule list again without the deprecated `detectorId` when the API answers the first page with BadRequest, warns once and leaves it out for the rest of the session. Lookups go on by rule ID and description tag. It used to fail every list request, and every deploy with it, on an API without the property
 - Behaviour observed while testing:
    - Every rule carries `schedule.lookback` and `alertTemplate.eventGroupingKind`. A request that omits them keeps the stored values, and a `null` lookback is ignored
    - A default lookback follows a frequency change. A set lookback stays

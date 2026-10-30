@@ -26,7 +26,7 @@
             Tags         = @('XDR', 'Defender', 'Detection', 'YAML', 'JSON', 'Security', 'MITRE')
             LicenseUri   = ''
             ProjectUri   = 'https://github.com/f-bader/XDRConverter'
-            ReleaseNotes = 'Version 2.1.0: Add the lookback, eventGroupingKind and isExcludedFromIncidentCorrelation YAML keys, accept more than one tactic per rule, create a rule whose listed id answers NotFound, and throw instead of reporting Skipped for a rule deleted in the same session.'
+            ReleaseNotes = 'Version 2.1.0: Add the lookback, eventGroupingKind and isExcludedFromIncidentCorrelation YAML keys, accept more than one tactic per rule, create a rule whose listed id answers NotFound, throw instead of reporting Skipped for a rule deleted in the same session, and list rules without the deprecated detectorId once the API rejects it.'
         }
     }
 }
