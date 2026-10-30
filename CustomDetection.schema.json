@@ -1,5 +1,5 @@
 {
-    "$schema": "https://json-schema.org/draft-07/schema",
+    "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "Microsoft XDR Custom Detection Template Schema",
     "type": "object",
     "description": "Schema for Microsoft XDR Custom Detection YAML templates used for automated deployment",
