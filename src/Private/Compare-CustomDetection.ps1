@@ -22,13 +22,18 @@ function Compare-CustomDetection {
     $remoteState = Get-CustomDetectionComparableState -Rule $Remote
 
     # Enumerations and device group names are matched by the API without case. Everything else, column names included, is case-sensitive
-    $caseInsensitiveKeys = @('status', 'severity', 'tactics', 'deviceGroups')
+    $caseInsensitiveKeys = @('status', 'severity', 'eventGroupingKind', 'tactics', 'deviceGroups')
+
+    # A request that omits these keeps the stored value, and every rule carries one, so only a value the file sets is compared
+    $fileOnlyKeys = @('lookback', 'eventGroupingKind', 'incidentExclusion')
 
     foreach ($key in $localState.Keys) {
         $localValue = "$($localState[$key])"
         $remoteValue = "$($remoteState[$key])"
         if ($localValue -eq '[]' -or $localValue -eq '{}') { $localValue = '' }
         if ($remoteValue -eq '[]' -or $remoteValue -eq '{}') { $remoteValue = '' }
+
+        if ($key -in $fileOnlyKeys -and $localValue -eq '') { continue }
 
         # The API offers no way to clear custom details, so an unset local value is not a change
         if ($key -eq 'customDetails' -and $localValue -eq '' -and $remoteValue -ne '') {

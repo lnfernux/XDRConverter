@@ -64,6 +64,20 @@ function Get-CustomDetectionComparableState {
         }
     }
 
+    $lookbackSource = Get-CustomDetectionValue -Object $Rule -Path 'schedule.lookback'
+    $lookback = ''
+    if (-not [string]::IsNullOrWhiteSpace("$lookbackSource")) {
+        try {
+            $lookback = ConvertTo-CustomDetectionLookback -Value $lookbackSource
+        } catch {
+            # An unrecognised remote value still has to compare, so keep it verbatim
+            $lookback = "$lookbackSource".Trim().ToUpperInvariant()
+        }
+    }
+
+    $excludedSource = Get-CustomDetectionValue -Object $Rule -Path 'detectionAction.incidentConfiguration.isExcludedFromIncidentCorrelation'
+    $excluded = if ($null -eq $excludedSource -or "$excludedSource" -eq '') { '' } else { "$excludedSource".ToLowerInvariant() }
+
     $tacticsSource = Get-CustomDetectionValue -Object $Rule -Path 'detectionAction.alertTemplate.tactics'
     $tactics = $null
     if ($null -ne $tacticsSource -and @($tacticsSource).Count -gt 0) {
@@ -130,15 +144,18 @@ function Get-CustomDetectionComparableState {
         status             = "$status"
         description        = "$(Get-CustomDetectionValue -Object $Rule -Path 'description')"
         frequency          = $frequency
+        lookback           = $lookback
         queryText          = "$(Get-CustomDetectionValue -Object $Rule -Path 'queryCondition.queryText')"
         title              = "$(Get-CustomDetectionValue -Object $Rule -Path 'detectionAction.alertTemplate.title')"
         alertDescription   = "$(Get-CustomDetectionValue -Object $Rule -Path 'detectionAction.alertTemplate.description')"
         severity           = ("$(Get-CustomDetectionValue -Object $Rule -Path 'detectionAction.alertTemplate.severity')").ToLowerInvariant()
         recommendedActions = "$(Get-CustomDetectionValue -Object $Rule -Path 'detectionAction.alertTemplate.recommendedActions')"
+        eventGroupingKind  = "$(Get-CustomDetectionValue -Object $Rule -Path 'detectionAction.alertTemplate.eventGroupingKind')"
         tactics            = ConvertTo-SortedJson -Value $tactics
         entityMappings     = ConvertTo-SortedJson -Value $entityMappings
         customDetails      = ConvertTo-SortedJson -Value $customDetails
         automatedActions   = ConvertTo-SortedJson -Value $actions
         deviceGroups       = ConvertTo-SortedJson -Value @($deviceGroups | ForEach-Object { "$_" } | Sort-Object)
+        incidentExclusion  = $excluded
     }
 }

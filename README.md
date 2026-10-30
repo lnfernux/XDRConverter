@@ -381,10 +381,12 @@ The Graph API deprecated several `detectionRule` properties and removes them on 
 | status | No | `status` | `enabled`, `disabled` or `autoDisabled`. Wins over `isEnabled` |
 | isEnabled | No | `status` | Legacy. `true` becomes `enabled`, `false` becomes `disabled`. Defaults to enabled |
 | frequency | Yes | `schedule.frequency` | ISO 8601 duration of days, hours, minutes and seconds. Normalised to the form the API stores, so `PT1440M` and `P1DT0H` become `P1D` and `PT90M` becomes `PT1H30M`. Weeks, months and years are rejected. Legacy tokens `0`, `1H`, `3H`, `12H`, `24H` are translated |
+| lookback | No | `schedule.lookback` | ISO 8601 duration the query covers, normalised like `frequency`. Sent only when the file sets it, otherwise the rule keeps its value. A new rule gets `PT4H` for `PT1H`, `PT12H` for `PT3H`, `P2D` for `PT12H`, `P30D` for `P1D` and none for `PT0S`. A default lookback follows a frequency change, a set one stays |
 | alertTitle | Yes | `detectionAction.alertTemplate.title` | |
 | alertSeverity | Yes | `detectionAction.alertTemplate.severity` | |
 | alertDescription | Yes | `detectionAction.alertTemplate.description` | The description tag is appended on deploy |
 | alertRecommendedAction | No | `detectionAction.alertTemplate.recommendedActions` | A value the file does not set is left unchanged on the rule |
+| eventGroupingKind | No | `detectionAction.alertTemplate.eventGroupingKind` | `alertPerEvent` or `singleAlert`, matched without case. Sent only when the file sets it, otherwise the rule keeps its value. A new rule gets `alertPerEvent` |
 | tactics | One of | `detectionAction.alertTemplate.tactics` | One `{ tactic, techniques }` entry. The API rejects more than one tactic per rule. Techniques may be plain ids or `{ technique, subTechniques }`. Wins over `alertCategory` and `mitreTechniques` |
 | alertCategory | One of | `detectionAction.alertTemplate.tactics[0].tactic` | Legacy. Becomes the single tactic |
 | mitreTechniques | No | `detectionAction.alertTemplate.tactics[0].techniques` | Legacy flat list. Sub-techniques are grouped under their parent technique |
@@ -392,6 +394,7 @@ The Graph API deprecated several `detectionRule` properties and removes them on 
 | impactedEntities | No | `detectionAction.alertTemplate.entityMappings` | Legacy `{ entityType, entityIdentifier }` list. `Machine`/`Device` map to `hosts`, `User`/`Account` to `accounts`, `Mailbox` to `mailboxes` |
 | customDetails | No | `detectionAction.alertTemplate.customDetails` | Up to 20 name to column pairs |
 | organizationalScope | No | `detectionAction.organizationalScope.deviceGroups` | Device group names. An empty list is omitted |
+| isExcludedFromIncidentCorrelation | No | `detectionAction.incidentConfiguration.isExcludedFromIncidentCorrelation` | `true` or `false`. Sent only when the file sets it, otherwise the rule keeps its value. A new rule gets `false` |
 | actions | No | `detectionAction.automatedActions` | List of `{ actionType, additionalFields }`. See the action table |
 | queryText | Yes | `queryCondition.queryText` | |
 
@@ -446,6 +449,8 @@ The API keeps any collection that a PATCH omits. An update therefore sends an em
 ### JSON to YAML
 
 `ConvertTo-CustomDetectionYaml` always emits the current keys: `frequency` as an ISO 8601 duration, `tactics`, `entityMappings`, `actions` with their column mapping, `customDetails`, `description` and `organizationalScope` as a plain list. `isEnabled` is kept for compatibility and `status` is added only for `autoDisabled`. Rules returned with the legacy properties are translated, so converting an old rule upgrades its YAML file.
+
+`lookback` is emitted only when it differs from the default for the rule's frequency, `eventGroupingKind` only when it is not `alertPerEvent`, and `isExcludedFromIncidentCorrelation` only when it is `true`. A JSON file passed to `Deploy-CustomDetection` goes through the same conversion, so a value equal to the default is not sent and the rule keeps the value it holds. `-LegacyKeys` drops the three keys with a warning.
 
 ### Upgrading existing YAML files
 
@@ -538,6 +543,15 @@ Connect-MgGraph -Scopes 'CustomDetections.ReadWrite.All'
 ```
 
 ## Changelog
+
+### 2.1.0
+
+- New optional YAML keys `lookback`, `eventGroupingKind` and `isExcludedFromIncidentCorrelation`, written to `schedule.lookback`, `detectionAction.alertTemplate.eventGroupingKind` and `detectionAction.incidentConfiguration.isExcludedFromIncidentCorrelation`. They reach the request and the change detection only when the file sets them, so a file without them never reports an update
+- `lookback` is normalised to the form the API stores, as `frequency` is
+- `ConvertTo-CustomDetectionYaml` emits the three keys only when they differ from the value the API assigns. `-LegacyKeys` drops them with a warning
+- Behaviour observed while testing:
+   - Every rule carries `schedule.lookback` and `alertTemplate.eventGroupingKind`. A request that omits them keeps the stored values, and a `null` lookback is ignored
+   - A default lookback follows a frequency change. A set lookback stays
 
 ### 2.0.0
 

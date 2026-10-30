@@ -82,6 +82,11 @@
                 }
             ]
         },
+        "lookback": {
+            "type": "string",
+            "pattern": "^P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+(?:\\.\\d+)?S)?)?$",
+            "description": "Optional time window the query covers, as an ISO 8601 duration of days, hours, minutes and seconds. Normalised to the form the API stores. When absent the rule keeps its value, and a new rule gets the default for its frequency: PT4H for PT1H, PT12H for PT3H, P2D for PT12H, P30D for P1D, none for PT0S"
+        },
         "alertSeverity": {
             "type": "string",
             "description": "Severity level of the alert",
@@ -99,6 +104,18 @@
         "alertRecommendedAction": {
             "type": "string",
             "description": "Recommended action to take when this alert is triggered. Can be multiline text"
+        },
+        "eventGroupingKind": {
+            "type": "string",
+            "description": "Optional. alertPerEvent raises an alert for each query result, singleAlert one alert for all results of a run. When absent the rule keeps its value, and a new rule gets alertPerEvent. The converter also accepts other casings",
+            "enum": [
+                "alertPerEvent",
+                "singleAlert"
+            ]
+        },
+        "isExcludedFromIncidentCorrelation": {
+            "type": "boolean",
+            "description": "Optional. true keeps the alerts of this rule out of incident correlation. When absent the rule keeps its value, and a new rule gets false"
         },
         "alertCategory": {
             "type": "string",
